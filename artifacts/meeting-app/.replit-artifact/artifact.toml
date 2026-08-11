@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Meeting Assistant"
+description = "A mobile-first PWA for managing meeting notes organized by project. Users can create projects (e.g., by client or team), add meetings under each project with title and date, and view meeting details with materials. Installable on iOS and Android home screens, with offline support via service worker."
+version = "1.0.0"
+id = "artifacts/meeting-app"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25188
+
+[services.development]
+run = "pnpm --filter @workspace/meeting-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/meeting-app", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/meeting-app/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25188"
+BASE_PATH = "/"

@@ -1,0 +1,2 @@
+- [Meeting App Backend](meeting-app-backend.md) — projects/meetings schema + Express routes wired to Drizzle PostgreSQL; date coercion quirk documented.
+- [Orval Zod Integer Issue](orval-zod-integer.md) — Orval v8 generates zod.int() (Zod v4 API) for `type: integer`; use `type: number` in OpenAPI spec to get zod.number() instead.
