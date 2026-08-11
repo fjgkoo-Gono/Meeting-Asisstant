@@ -22,6 +22,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useNavigation } from 'expo-router';
 import {
   useGetMeeting,
@@ -43,7 +44,7 @@ import {
   generateId,
   type ChatMessage as ChatMessageType,
 } from '@/lib/chat';
-import { uploadPhotoMaterial } from '@/lib/upload';
+import { uploadPhotoMaterial, uploadDocumentMaterial } from '@/lib/upload';
 
 type Tab = 'materials' | 'chat';
 
@@ -146,6 +147,7 @@ export default function MeetingDetailScreen() {
   const [textContent, setTextContent] = useState('');
   const [textName, setTextName] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
 
   // --- Chat ---
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
@@ -272,17 +274,53 @@ export default function MeetingDetailScreen() {
     }
   }
 
+  async function handleAddDocument() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/pdf',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType ?? 'application/octet-stream';
+      const materialType =
+        mimeType === 'application/pdf' ? 'pdf' : 'excel';
+      setUploadingDocument(true);
+      await uploadDocumentMaterial(
+        pid,
+        mid,
+        asset.uri,
+        asset.name,
+        mimeType,
+        materialType,
+      );
+      queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      Alert.alert('Upload failed', msg);
+    } finally {
+      setUploadingDocument(false);
+    }
+  }
+
   function showAddOptions() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Take Photo', 'Choose from Library', 'Add Text Note'],
+          options: ['Cancel', 'Take Photo', 'Choose from Library', 'Choose from Files', 'Add Text Note'],
           cancelButtonIndex: 0,
         },
         (idx) => {
           if (idx === 1) handleAddPhoto('camera');
           else if (idx === 2) handleAddPhoto('gallery');
-          else if (idx === 3) setShowTextModal(true);
+          else if (idx === 3) handleAddDocument();
+          else if (idx === 4) setShowTextModal(true);
         },
       );
     } else {
@@ -290,6 +328,7 @@ export default function MeetingDetailScreen() {
       Alert.alert('Add Material', 'Choose source', [
         { text: 'Take Photo', onPress: () => handleAddPhoto('camera') },
         { text: 'From Library', onPress: () => handleAddPhoto('gallery') },
+        { text: 'From Files', onPress: () => handleAddDocument() },
         { text: 'Text Note', onPress: () => setShowTextModal(true) },
         { text: 'Cancel', style: 'cancel' },
       ]);
@@ -377,13 +416,13 @@ export default function MeetingDetailScreen() {
             </Text>
             <Pressable
               onPress={showAddOptions}
-              disabled={uploadingPhoto}
+              disabled={uploadingPhoto || uploadingDocument}
               style={({ pressed }) => [
                 styles.addMaterialBtn,
-                { backgroundColor: colors.primary, opacity: pressed || uploadingPhoto ? 0.7 : 1 },
+                { backgroundColor: colors.primary, opacity: pressed || uploadingPhoto || uploadingDocument ? 0.7 : 1 },
               ]}
             >
-              {uploadingPhoto ? (
+              {uploadingPhoto || uploadingDocument ? (
                 <ActivityIndicator size="small" color={colors.primaryForeground} />
               ) : (
                 <Feather name="plus" size={16} color={colors.primaryForeground} />
@@ -405,7 +444,7 @@ export default function MeetingDetailScreen() {
                 No materials yet
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-                Add photos, images, or text notes
+                Add photos, PDFs, documents, or text notes
               </Text>
             </View>
           ) : (
