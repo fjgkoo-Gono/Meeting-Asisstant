@@ -7,7 +7,7 @@ const { Pool } = pg;
 // SUPABASE_DATABASE_URL takes priority so both dev and production
 // connect to the same shared Supabase PostgreSQL instance.
 // Falls back to the Replit-managed DATABASE_URL (environment-local).
-const connectionString = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
+let connectionString = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error(
@@ -16,6 +16,15 @@ if (!connectionString) {
 }
 
 const isSupabase = !!process.env.SUPABASE_DATABASE_URL;
+
+// Supabase Transaction Pooler (port 6543) doesn't support prepared statements
+// used by Drizzle ORM. Silently upgrade to Session Pooler (port 5432).
+if (isSupabase && connectionString.includes(".pooler.supabase.com:6543")) {
+  connectionString = connectionString.replace(
+    ".pooler.supabase.com:6543",
+    ".pooler.supabase.com:5432",
+  );
+}
 
 export const pool = new Pool({
   connectionString,
