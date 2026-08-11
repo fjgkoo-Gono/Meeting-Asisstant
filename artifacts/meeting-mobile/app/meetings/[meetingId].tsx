@@ -171,8 +171,22 @@ export default function MeetingDetailScreen() {
   const [showTextModal, setShowTextModal] = useState(false);
   const [textContent, setTextContent] = useState('');
   const [textName, setTextName] = useState('');
+  const [textContextNote, setTextContextNote] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+
+  // Android custom add-material sheet
+  const [showAndroidSheet, setShowAndroidSheet] = useState(false);
+
+  // Pending upload — file picked, waiting for context note confirmation
+  type PendingUploadData = {
+    uri: string;
+    fileName: string;
+    mimeType: string;
+    type: 'photo' | 'image' | 'pdf' | 'excel';
+  };
+  const [pendingUpload, setPendingUpload] = useState<PendingUploadData | null>(null);
+  const [contextNoteInput, setContextNoteInput] = useState('');
 
   // --- Chat ---
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
@@ -280,22 +294,17 @@ export default function MeetingDetailScreen() {
       }
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      setUploadingPhoto(true);
-      await uploadPhotoMaterial(
-        pid,
-        mid,
-        asset.uri,
-        asset.fileName ?? 'photo.jpg',
-        asset.mimeType ?? 'image/jpeg',
-        'photo',
-      );
-      queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Store pending upload and show context note modal
+      setContextNoteInput('');
+      setPendingUpload({
+        uri: asset.uri,
+        fileName: asset.fileName ?? 'photo.jpg',
+        mimeType: asset.mimeType ?? 'image/jpeg',
+        type: 'photo',
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      Alert.alert('Upload failed', msg);
-    } finally {
-      setUploadingPhoto(false);
+      Alert.alert('Error', msg);
     }
   }
 
@@ -313,24 +322,52 @@ export default function MeetingDetailScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       const mimeType = asset.mimeType ?? 'application/octet-stream';
-      const materialType =
-        mimeType === 'application/pdf' ? 'pdf' : 'excel';
-      setUploadingDocument(true);
-      await uploadDocumentMaterial(
-        pid,
-        mid,
-        asset.uri,
-        asset.name,
+      const materialType = mimeType === 'application/pdf' ? 'pdf' : 'excel';
+      // Store pending upload and show context note modal
+      setContextNoteInput('');
+      setPendingUpload({
+        uri: asset.uri,
+        fileName: asset.name,
         mimeType,
-        materialType,
-      );
-      queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        type: materialType,
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      Alert.alert('Upload failed', msg);
-    } finally {
-      setUploadingDocument(false);
+      Alert.alert('Error', msg);
+    }
+  }
+
+  async function handleConfirmUpload(note: string) {
+    if (!pendingUpload) return;
+    const { uri, fileName, mimeType, type } = pendingUpload;
+    setPendingUpload(null);
+    setContextNoteInput('');
+    const contextNote = note.trim() || undefined;
+
+    if (type === 'photo' || type === 'image') {
+      setUploadingPhoto(true);
+      try {
+        await uploadPhotoMaterial(pid, mid, uri, fileName, mimeType, type, contextNote);
+        queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        Alert.alert('Upload failed', msg);
+      } finally {
+        setUploadingPhoto(false);
+      }
+    } else {
+      setUploadingDocument(true);
+      try {
+        await uploadDocumentMaterial(pid, mid, uri, fileName, mimeType, type, contextNote);
+        queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        Alert.alert('Upload failed', msg);
+      } finally {
+        setUploadingDocument(false);
+      }
     }
   }
 
@@ -338,7 +375,7 @@ export default function MeetingDetailScreen() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Take Photo', 'Choose from Library', 'Choose from Files', 'Add Text Note'],
+          options: ['Cancelar', 'Tomar foto', 'Elegir de galería', 'Elegir archivo', 'Agregar texto'],
           cancelButtonIndex: 0,
         },
         (idx) => {
@@ -349,14 +386,8 @@ export default function MeetingDetailScreen() {
         },
       );
     } else {
-      // Android / web: use a simple alert
-      Alert.alert('Add Material', 'Choose source', [
-        { text: 'Take Photo', onPress: () => handleAddPhoto('camera') },
-        { text: 'From Library', onPress: () => handleAddPhoto('gallery') },
-        { text: 'From Files', onPress: () => handleAddDocument() },
-        { text: 'Text Note', onPress: () => setShowTextModal(true) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+      // Android: show custom bottom sheet
+      setShowAndroidSheet(true);
     }
   }
 
@@ -649,8 +680,14 @@ export default function MeetingDetailScreen() {
                   createMaterial({
                     projectId: pid,
                     meetingId: mid,
-                    data: { type: 'text', name: textName.trim() || undefined, content: textContent.trim() } as Parameters<typeof createMaterial>[0]['data'],
+                    data: {
+                      type: 'text',
+                      name: textName.trim() || undefined,
+                      content: textContent.trim(),
+                      contextNote: textContextNote.trim() || undefined,
+                    } as Parameters<typeof createMaterial>[0]['data'],
                   });
+                  setTextContextNote('');
                 }}
                 disabled={!textContent.trim() || creatingMaterial}
                 hitSlop={8}
@@ -697,9 +734,131 @@ export default function MeetingDetailScreen() {
                 autoFocus
                 maxLength={20000}
               />
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTA DE CONTEXTO (OPCIONAL)</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder="Contexto para el asistente IA…"
+                placeholderTextColor={colors.mutedForeground}
+                value={textContextNote}
+                onChangeText={setTextContextNote}
+                maxLength={500}
+              />
             </ScrollView>
           </View>
         </RNKeyboardAvoidingView>
+      </Modal>
+
+      {/* Context note modal — shown after picking a file, before uploading */}
+      <Modal
+        visible={!!pendingUpload}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setPendingUpload(null)}
+      >
+        <RNKeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.modal, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Pressable onPress={() => setPendingUpload(null)} hitSlop={8}>
+                <Feather name="x" size={22} color={colors.foreground} />
+              </Pressable>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Nota de contexto</Text>
+              <Pressable onPress={() => handleConfirmUpload(contextNoteInput)} hitSlop={8}>
+                <Text style={[styles.saveBtn, { color: colors.primary }]}>Subir</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              {/* File badge */}
+              <View style={[styles.fileBadge, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <Feather name="paperclip" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.fileBadgeText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {pendingUpload?.fileName ?? ''}
+                </Text>
+              </View>
+
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                NOTA PARA EL ASISTENTE IA (OPCIONAL)
+              </Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  styles.contextNoteArea,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder={'Ej: "Presupuesto Q3 aprobado" o "Foto de la pizarra del diagrama de flujo"'}
+                placeholderTextColor={colors.mutedForeground}
+                value={contextNoteInput}
+                onChangeText={setContextNoteInput}
+                multiline
+                autoFocus
+                maxLength={500}
+              />
+              <Pressable
+                onPress={() => handleConfirmUpload('')}
+                hitSlop={8}
+                style={styles.skipBtn}
+              >
+                <Text style={[styles.skipText, { color: colors.mutedForeground }]}>
+                  Omitir y subir sin nota
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </RNKeyboardAvoidingView>
+      </Modal>
+
+      {/* Android custom add-material bottom sheet */}
+      <Modal
+        visible={showAndroidSheet}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAndroidSheet(false)}
+      >
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => setShowAndroidSheet(false)}
+        >
+          <Pressable
+            style={[styles.sheetContainer, { backgroundColor: colors.card }]}
+            onPress={() => {/* prevent close on inner press */}}
+          >
+            <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Agregar material</Text>
+            {[
+              { icon: 'camera' as const, label: 'Tomar foto', onPress: () => { setShowAndroidSheet(false); handleAddPhoto('camera'); } },
+              { icon: 'image' as const, label: 'Elegir de galería', onPress: () => { setShowAndroidSheet(false); handleAddPhoto('gallery'); } },
+              { icon: 'file-text' as const, label: 'Elegir archivo (PDF / Excel)', onPress: () => { setShowAndroidSheet(false); handleAddDocument(); } },
+              { icon: 'type' as const, label: 'Agregar texto / transcripción', onPress: () => { setShowAndroidSheet(false); setShowTextModal(true); } },
+            ].map((item) => (
+              <Pressable
+                key={item.label}
+                onPress={item.onPress}
+                style={({ pressed }) => [
+                  styles.sheetOption,
+                  { borderTopColor: colors.border, opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <View style={[styles.sheetIconBox, { backgroundColor: colors.muted }]}>
+                  <Feather name={item.icon} size={18} color={colors.primary} />
+                </View>
+                <Text style={[styles.sheetOptionText, { color: colors.foreground }]}>{item.label}</Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setShowAndroidSheet(false)}
+              style={({ pressed }) => [
+                styles.sheetCancel,
+                { borderTopColor: colors.border, opacity: pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text style={[styles.sheetCancelText, { color: colors.mutedForeground }]}>Cancelar</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -851,5 +1010,81 @@ const styles = StyleSheet.create({
   textArea: {
     height: 200,
     textAlignVertical: 'top',
+  },
+  contextNoteArea: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  fileBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  fileBadgeText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    flex: 1,
+  },
+  skipBtn: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  skipText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    textDecorationLine: 'underline',
+  },
+  // Android bottom sheet
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 32,
+    overflow: 'hidden',
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    fontFamily: 'Inter_600SemiBold',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  sheetIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetOptionText: {
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+  },
+  sheetCancel: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+  },
+  sheetCancelText: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
   },
 });

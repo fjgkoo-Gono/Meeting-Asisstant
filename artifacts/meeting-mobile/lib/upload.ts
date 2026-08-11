@@ -15,6 +15,7 @@ export async function uploadDocumentMaterial(
   fileName: string,
   mimeType: string,
   materialType: 'pdf' | 'excel',
+  contextNote?: string,
 ): Promise<unknown> {
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/api/projects/${projectId}/meetings/${meetingId}/materials`;
@@ -26,6 +27,7 @@ export async function uploadDocumentMaterial(
     name: fileName,
     type: mimeType,
   } as unknown as Blob);
+  if (contextNote?.trim()) formData.append('contextNote', contextNote.trim());
 
   const response = await globalThis.fetch(url, {
     method: 'POST',
@@ -47,6 +49,7 @@ export async function uploadPhotoMaterial(
   fileName: string,
   mimeType: string,
   materialType: 'photo' | 'image' = 'photo',
+  contextNote?: string,
 ): Promise<unknown> {
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/api/projects/${projectId}/meetings/${meetingId}/materials`;
@@ -59,6 +62,7 @@ export async function uploadPhotoMaterial(
     name: fileName,
     type: mimeType,
   } as unknown as Blob);
+  if (contextNote?.trim()) formData.append('contextNote', contextNote.trim());
 
   const response = await globalThis.fetch(url, {
     method: 'POST',
