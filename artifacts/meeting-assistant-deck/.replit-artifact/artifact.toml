@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/meeting-assistant-deck/"
+title = "Meeting Assistant"
+description = "Slide deck sobre el proyecto Meeting Assistant — arquitectura, funcionalidades, stack técnico e IA con Claude. 9 slides en estilo SaaS Product Launch oscuro."
+version = "1.0.0"
+id = "artifacts/meeting-assistant-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/meeting-assistant-deck/" ]
+localPort = 19433
+
+[services.development]
+run = "pnpm --filter @workspace/meeting-assistant-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/meeting-assistant-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/meeting-assistant-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19433"
+BASE_PATH = "/meeting-assistant-deck/"

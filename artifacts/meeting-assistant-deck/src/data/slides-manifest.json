@@ -1,0 +1,74 @@
+[
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890101",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide1Title.tsx",
+    "title": "Meeting Assistant",
+    "description": "Slide de título — introducción a la plataforma",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890102",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide2Problem.tsx",
+    "title": "El problema",
+    "description": "Las reuniones se pierden en el caos — cuatro puntos de dolor",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890103",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide3Solution.tsx",
+    "title": "La solución",
+    "description": "Meeting Assistant centraliza proyectos, materiales, chat IA y acceso multiplataforma",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890104",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide4Features.tsx",
+    "title": "Funcionalidades clave",
+    "description": "Proyectos, reuniones, materiales, chat IA y búsqueda",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890105",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide5Architecture.tsx",
+    "title": "Arquitectura técnica",
+    "description": "Stack completo: React, Expo, Express, Python FastAPI, Claude, Supabase, Cloudinary",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890106",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide6AI.tsx",
+    "title": "Inteligencia artificial con Claude",
+    "description": "Resúmenes, action items, Q&A, análisis de imágenes — todo vía Anthropic Claude",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890107",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide7Web.tsx",
+    "title": "Experiencia web",
+    "description": "Dashboard, materiales, chat integrado, subida de archivos — React + Vite PWA",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890108",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide8Mobile.tsx",
+    "title": "App móvil nativa",
+    "description": "Expo iOS & Android — swipe, pull-to-refresh, teclado inteligente",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c1d2e3f4-a5b6-4789-8012-d34567890109",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide9Status.tsx",
+    "title": "Estado actual y próximos pasos",
+    "description": "Construido vs. roadmap — plataforma completa en producción",
+    "speakerNotes": ""
+  }
+]
