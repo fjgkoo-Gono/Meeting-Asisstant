@@ -55,9 +55,13 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // Don't intercept navigations to /api/ paths — let the API server handle them
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api'),
+            // API data requests (not file downloads)
+            urlPattern: ({ url, request }) =>
+              url.pathname.startsWith('/api') && request.destination !== 'document',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

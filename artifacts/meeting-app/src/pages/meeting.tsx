@@ -318,8 +318,30 @@ function MaterialCard({
   const hasFile = material.type !== 'text' && material.filename;
   const fileUrl = hasFile ? `/api/files/${material.filename}` : null;
 
-  const handleOpen = () => {
-    if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+  // Use fetch→blob to open the file, bypassing the PWA service worker
+  // which would otherwise intercept the navigation and show the React 404 page.
+  const handleOpen = async () => {
+    if (!fileUrl) return;
+    try {
+      const res = await fetch(fileUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      // Revoke the object URL once the tab has had time to load
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      if (!win) {
+        // Fallback if popup was blocked
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.click();
+      }
+    } catch {
+      // Last-resort: open URL directly (may still hit SW, but better than nothing)
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    }
   };
 
   return (

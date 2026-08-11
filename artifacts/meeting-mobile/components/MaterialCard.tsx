@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import type { Material } from '@workspace/api-client-react';
@@ -18,6 +18,11 @@ const TYPE_ICONS: Record<string, string> = {
   text: 'type',
 };
 
+function getBaseUrl(): string {
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  return domain ? `https://${domain}` : '';
+}
+
 export function MaterialCard({ material, onRetry, onDelete }: Props) {
   const colors = useColors();
   const icon = (TYPE_ICONS[material.type] ?? 'paperclip') as Parameters<typeof Feather>[0]['name'];
@@ -30,7 +35,22 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
         : colors.destructive;
 
   const statusLabel =
-    material.status === 'ready' ? 'Ready' : material.status === 'processing' ? 'Processing' : 'Failed';
+    material.status === 'ready'
+      ? 'Ready'
+      : material.status === 'processing'
+        ? 'Processing'
+        : 'Failed';
+
+  const hasFile = material.type !== 'text' && material.filename;
+  const fileUrl = hasFile ? `${getBaseUrl()}/api/files/${material.filename}` : null;
+
+  const handleOpen = () => {
+    if (fileUrl) {
+      Linking.openURL(fileUrl).catch(() => {
+        console.warn('Could not open file:', fileUrl);
+      });
+    }
+  };
 
   return (
     <Pressable
@@ -56,6 +76,11 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
             · {material.type.toUpperCase()}
           </Text>
         </View>
+        {material.contextNote ? (
+          <Text style={[styles.contextNote, { color: colors.mutedForeground }]} numberOfLines={2}>
+            📌 {material.contextNote}
+          </Text>
+        ) : null}
         {material.status === 'ready' && material.extractedText ? (
           <Text style={[styles.preview, { color: colors.mutedForeground }]} numberOfLines={2}>
             {material.extractedText.slice(0, 120)}
@@ -63,6 +88,18 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
         ) : null}
       </View>
       <View style={styles.actions}>
+        {hasFile ? (
+          <Pressable
+            onPress={handleOpen}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              { backgroundColor: colors.muted, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="external-link" size={14} color={colors.primary} />
+          </Pressable>
+        ) : null}
         {material.status === 'error' && onRetry ? (
           <Pressable
             onPress={onRetry}
@@ -139,6 +176,12 @@ const styles = StyleSheet.create({
   typeText: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
+  },
+  contextNote: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Inter_400Regular',
+    fontStyle: 'italic',
   },
   preview: {
     fontSize: 12,
