@@ -40,12 +40,14 @@ function getBaseUrl(): string {
 function TextViewerModal({
   visible,
   title,
+  subtitle,
   contextNote,
   content,
   onClose,
 }: {
   visible: boolean;
   title: string;
+  subtitle?: string;
   contextNote?: string | null;
   content: string;
   onClose: () => void;
@@ -76,6 +78,11 @@ function TextViewerModal({
           style={viewerStyles.body}
           contentContainerStyle={[viewerStyles.bodyContent, { paddingBottom: insets.bottom + 24 }]}
         >
+          {/* Subtitle label (e.g. "Transcript") */}
+          {subtitle ? (
+            <Text style={[viewerStyles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
+          ) : null}
+
           {/* Context note badge */}
           {contextNote ? (
             <View style={[viewerStyles.contextBadge, { backgroundColor: colors.muted, borderColor: colors.border }]}>
@@ -124,6 +131,14 @@ const viewerStyles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
+  subtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    fontWeight: '500' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
   contextBadge: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -164,7 +179,9 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
 
   const hasFile = material.type !== 'text' && material.filename;
   const fileUrl = hasFile ? `${getBaseUrl()}/api/files/${material.filename}` : null;
-  const hasText = material.type === 'text' && !!material.extractedText;
+  const hasText =
+    (material.type === 'text' || (material.type === 'audio' && material.status === 'ready')) &&
+    !!material.extractedText;
 
   const handleOpen = () => {
     if (fileUrl) {
@@ -272,6 +289,7 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
         <TextViewerModal
           visible={showTextViewer}
           title={material.originalName}
+          subtitle={material.type === 'audio' ? 'Transcript' : undefined}
           contextNote={material.contextNote}
           content={material.extractedText!}
           onClose={() => setShowTextViewer(false)}

@@ -375,12 +375,12 @@ function MaterialCard({
             </button>
           )}
 
-          {/* Expand text */}
-          {material.type === 'text' && material.extractedText && (
+          {/* Expand text / transcript */}
+          {(material.type === 'text' || (material.type === 'audio' && material.status === 'ready')) && material.extractedText && (
             <button
               onClick={() => setShowText(v => !v)}
               className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
-              title="Ver contenido"
+              title={material.type === 'audio' ? 'Ver transcripción' : 'Ver contenido'}
             >
               {showText ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
@@ -407,9 +407,12 @@ function MaterialCard({
         </div>
       )}
 
-      {/* Expanded text */}
+      {/* Expanded text / transcript */}
       {showText && material.extractedText && (
         <div className="px-4 pb-4 border-t border-border/50 pt-3">
+          {material.type === 'audio' && (
+            <p className="text-xs font-medium text-muted-foreground mb-2">Transcripción</p>
+          )}
           <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
             {material.extractedText}
           </p>
