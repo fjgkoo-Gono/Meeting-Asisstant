@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-export type MaterialType = "photo" | "image" | "pdf" | "excel" | "text";
+export type MaterialType = "photo" | "image" | "pdf" | "excel" | "text" | "audio";
 
 /**
  * Extract plain text from an uploaded file based on its material type.
@@ -58,6 +58,10 @@ export async function extractText(
     case "photo":
     case "image": {
       return `[Image: ${path.basename(filePath)} — text extraction not available for images]`;
+    }
+
+    case "audio": {
+      return `[Audio: ${path.basename(filePath)} — transcription not available]`;
     }
 
     default:

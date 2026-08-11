@@ -35,10 +35,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (audio files can be large)
 });
 
-const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel"];
+const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel", "audio"];
 
 type ResolveError = { ok: false; error: string; status: 404 };
 type ResolveSuccess = { ok: true };

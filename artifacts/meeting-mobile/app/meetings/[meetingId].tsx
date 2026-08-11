@@ -308,6 +308,28 @@ export default function MeetingDetailScreen() {
     }
   }
 
+  async function handleAddAudio() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/*', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/x-m4a', 'audio/webm'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      setContextNoteInput('');
+      setPendingUpload({
+        uri: asset.uri,
+        fileName: asset.name,
+        mimeType: asset.mimeType ?? 'audio/mpeg',
+        type: 'audio',
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      Alert.alert('Error', msg);
+    }
+  }
+
   async function handleAddDocument() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -375,14 +397,15 @@ export default function MeetingDetailScreen() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancelar', 'Tomar foto', 'Elegir de galería', 'Elegir archivo', 'Agregar texto'],
+          options: ['Cancelar', 'Tomar foto', 'Elegir de galería', 'Elegir archivo (PDF/Excel)', 'Subir audio', 'Agregar texto'],
           cancelButtonIndex: 0,
         },
         (idx) => {
           if (idx === 1) handleAddPhoto('camera');
           else if (idx === 2) handleAddPhoto('gallery');
           else if (idx === 3) handleAddDocument();
-          else if (idx === 4) setShowTextModal(true);
+          else if (idx === 4) handleAddAudio();
+          else if (idx === 5) setShowTextModal(true);
         },
       );
     } else {
@@ -832,6 +855,7 @@ export default function MeetingDetailScreen() {
               { icon: 'camera' as const, label: 'Tomar foto', onPress: () => { setShowAndroidSheet(false); handleAddPhoto('camera'); } },
               { icon: 'image' as const, label: 'Elegir de galería', onPress: () => { setShowAndroidSheet(false); handleAddPhoto('gallery'); } },
               { icon: 'file-text' as const, label: 'Elegir archivo (PDF / Excel)', onPress: () => { setShowAndroidSheet(false); handleAddDocument(); } },
+              { icon: 'mic' as const, label: 'Subir audio (MP3, M4A, WAV…)', onPress: () => { setShowAndroidSheet(false); handleAddAudio(); } },
               { icon: 'type' as const, label: 'Agregar texto / transcripción', onPress: () => { setShowAndroidSheet(false); setShowTextModal(true); } },
             ].map((item) => (
               <Pressable

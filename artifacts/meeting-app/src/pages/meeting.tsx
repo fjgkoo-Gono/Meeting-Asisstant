@@ -33,6 +33,7 @@ import {
   StickyNote,
   ChevronDown,
   ChevronUp,
+  Mic,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -42,7 +43,7 @@ import { ChatPanel } from '@/components/chat/ChatPanel';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-type FileMaterialType = Extract<MaterialType, 'photo' | 'image' | 'pdf' | 'excel'>;
+type FileMaterialType = Extract<MaterialType, 'photo' | 'image' | 'pdf' | 'excel' | 'audio'>;
 
 const FILE_TYPE_CONFIG: Record<
   FileMaterialType,
@@ -57,6 +58,11 @@ const FILE_TYPE_CONFIG: Record<
     accept:
       '.xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv',
   },
+  audio: {
+    label: 'Audio',
+    icon: Mic,
+    accept: 'audio/*,.mp3,.m4a,.wav,.ogg,.aac,.webm',
+  },
 };
 
 const TYPE_ICON: Record<MaterialType, React.ElementType> = {
@@ -65,6 +71,7 @@ const TYPE_ICON: Record<MaterialType, React.ElementType> = {
   pdf: FileText,
   excel: Table2,
   text: AlignLeft,
+  audio: Mic,
 };
 
 function StatusBadge({ status }: { status: Material['status'] }) {

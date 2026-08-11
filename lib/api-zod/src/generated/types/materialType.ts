@@ -15,4 +15,5 @@ export const MaterialType = {
   pdf: 'pdf',
   excel: 'excel',
   text: 'text',
+  audio: 'audio',
 } as const;

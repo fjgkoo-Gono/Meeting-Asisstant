@@ -93,6 +93,7 @@ export const MaterialType = {
   pdf: 'pdf',
   excel: 'excel',
   text: 'text',
+  audio: 'audio',
 } as const;
 
 export type MaterialStatus = typeof MaterialStatus[keyof typeof MaterialStatus];
