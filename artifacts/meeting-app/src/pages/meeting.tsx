@@ -325,29 +325,42 @@ function MaterialCard({
   const hasFile = material.type !== 'text' && material.filename;
   const fileUrl = hasFile ? `/api/files/${material.filename}` : null;
 
-  // Use fetch→blob to open the file, bypassing the PWA service worker
-  // which would otherwise intercept the navigation and show the React 404 page.
+  // Open file in a new tab. We open the blank window *synchronously* (before
+  // any await) so popup blockers don't block it, then load the blob URL into
+  // it once the fetch completes. This avoids the common failure where
+  // window.open called after an await is silently blocked.
   const handleOpen = async () => {
     if (!fileUrl) return;
+    // Open now, synchronously, so the browser sees it as a direct user gesture
+    const win = window.open('', '_blank', 'noopener,noreferrer');
     try {
       const res = await fetch(fileUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-      // Revoke the object URL once the tab has had time to load
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-      if (!win) {
-        // Fallback if popup was blocked
+      if (win) {
+        win.location.href = blobUrl;
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      } else {
+        // If the window was somehow blocked, try a direct anchor click
         const a = document.createElement('a');
         a.href = blobUrl;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
       }
     } catch {
-      // Last-resort: open URL directly (may still hit SW, but better than nothing)
-      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      // Fetch failed — navigate the already-open window to the direct URL.
+      // The SW navigateFallbackDenylist(/^\/api\//) prevents it from serving
+      // index.html for this navigation.
+      if (win) {
+        win.location.href = fileUrl;
+      } else {
+        window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 

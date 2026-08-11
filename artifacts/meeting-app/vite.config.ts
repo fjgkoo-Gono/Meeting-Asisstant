@@ -59,9 +59,12 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            // API data requests (not file downloads)
+            // API data requests — excludes file downloads (/api/files/) which
+            // must always go to the network and must not be served from cache.
             urlPattern: ({ url, request }) =>
-              url.pathname.startsWith('/api') && request.destination !== 'document',
+              url.pathname.startsWith('/api') &&
+              !url.pathname.startsWith('/api/files/') &&
+              request.destination !== 'document',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
