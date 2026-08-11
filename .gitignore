@@ -27,6 +27,10 @@ node_modules
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# runtime upload storage
+artifacts/api-server/uploads/*
+!artifacts/api-server/uploads/.gitkeep
+
 # misc
 /.sass-cache
 /connect.lock
