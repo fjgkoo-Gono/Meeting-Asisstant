@@ -68,6 +68,14 @@ catalog:
 
 autoInstallPeers: false
 
+# react-native-worklets@0.5.1 requires @babel/generator in its Babel plugin
+# but doesn't declare it as a dependency. This injects it so pnpm's strict
+# module resolution doesn't block it during Metro bundling.
+packageExtensions:
+  react-native-worklets@*:
+    dependencies:
+      '@babel/generator': '*'
+
 onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
