@@ -47,7 +47,7 @@ export default function ProjectsScreen() {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
-  const { data: projects = [], isLoading, refetch, isRefetching } = useListProjects();
+  const { data: projects = [], isLoading, refetch, isRefetching } = useListProjects({ query: { refetchInterval: 30_000 } });
 
   const { mutate: createProject, isPending: creating } = useCreateProject({
     mutation: {
