@@ -7,9 +7,10 @@ import type { Meeting } from '@workspace/api-client-react';
 interface Props {
   meeting: Meeting;
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
-export function MeetingCard({ meeting, onPress }: Props) {
+export function MeetingCard({ meeting, onPress, onLongPress }: Props) {
   const colors = useColors();
 
   const date = new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -22,6 +23,8 @@ export function MeetingCard({ meeting, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       style={({ pressed }) => [
         styles.card,
         {

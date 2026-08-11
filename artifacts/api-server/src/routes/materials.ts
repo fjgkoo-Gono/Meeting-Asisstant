@@ -12,6 +12,7 @@ import {
   CreateMaterialResponse,
   RetryMaterialParams,
   RetryMaterialResponse,
+  DeleteMaterialParams,
 } from "@workspace/api-zod";
 import { extractText, type MaterialType } from "../lib/extractor";
 import { logger } from "../lib/logger";
@@ -245,6 +246,51 @@ router.post(
           .where(eq(materialsTable.id, params.data.materialId));
       }
     });
+  },
+);
+
+// DELETE /projects/:projectId/meetings/:meetingId/materials/:materialId
+router.delete(
+  "/projects/:projectId/meetings/:meetingId/materials/:materialId",
+  async (req, res): Promise<void> => {
+    const params = DeleteMaterialParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    if (!resolved.ok) {
+      res.status(resolved.status).json({ error: resolved.error });
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(materialsTable)
+      .where(
+        and(
+          eq(materialsTable.id, params.data.materialId),
+          eq(materialsTable.meetingId, params.data.meetingId),
+        ),
+      )
+      .returning();
+
+    if (!deleted) {
+      res.status(404).json({ error: "Material not found" });
+      return;
+    }
+
+    // Clean up the uploaded file if it exists
+    if (deleted.filename) {
+      const filePath = path.join(UPLOADS_DIR, deleted.filename);
+      fs.unlink(filePath, (err) => {
+        if (err && (err as NodeJS.ErrnoException).code !== "ENOENT") {
+          logger.warn({ err, materialId: deleted.id }, "Failed to delete material file");
+        }
+      });
+    }
+
+    res.status(204).send();
   },
 );
 

@@ -586,6 +586,79 @@ export const useUpdateProject = <TError = ErrorType<ErrorResponse>,
       return useMutation(getUpdateProjectMutationOptions(options));
     }
 
+export const getDeleteMeetingUrl = (projectId: number,
+    meetingId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/meetings/${meetingId}`
+}
+
+/**
+ * @summary Delete a meeting by ID
+ */
+export const deleteMeeting = async (projectId: number,
+    meetingId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteMeetingUrl(projectId,meetingId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMeetingMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMeeting>>, TError,{projectId: number;meetingId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMeeting>>, TError,{projectId: number;meetingId: number}, TContext> => {
+
+const mutationKey = ['deleteMeeting'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMeeting>>, {projectId: number;meetingId: number}> = (props) => {
+          const {projectId,meetingId} = props ?? {};
+
+          return  deleteMeeting(projectId,meetingId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMeetingMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMeeting>>>
+
+    export type DeleteMeetingMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a meeting by ID
+ */
+export const useDeleteMeeting = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMeeting>>, TError,{projectId: number;meetingId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMeeting>>,
+        TError,
+        {projectId: number;meetingId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMeetingMutationOptions(options));
+    }
+
 export const getGetMeetingUrl = (projectId: number,
     meetingId: number,) => {
 
@@ -896,6 +969,81 @@ export const useCreateMaterial = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateMaterialMutationOptions(options));
+    }
+
+export const getDeleteMaterialUrl = (projectId: number,
+    meetingId: number,
+    materialId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/meetings/${meetingId}/materials/${materialId}`
+}
+
+/**
+ * @summary Delete a material by ID
+ */
+export const deleteMaterial = async (projectId: number,
+    meetingId: number,
+    materialId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteMaterialUrl(projectId,meetingId,materialId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMaterialMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMaterial>>, TError,{projectId: number;meetingId: number;materialId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMaterial>>, TError,{projectId: number;meetingId: number;materialId: number}, TContext> => {
+
+const mutationKey = ['deleteMaterial'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMaterial>>, {projectId: number;meetingId: number;materialId: number}> = (props) => {
+          const {projectId,meetingId,materialId} = props ?? {};
+
+          return  deleteMaterial(projectId,meetingId,materialId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMaterialMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMaterial>>>
+
+    export type DeleteMaterialMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a material by ID
+ */
+export const useDeleteMaterial = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMaterial>>, TError,{projectId: number;meetingId: number;materialId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMaterial>>,
+        TError,
+        {projectId: number;meetingId: number;materialId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMaterialMutationOptions(options));
     }
 
 export const getRetryMaterialUrl = (projectId: number,

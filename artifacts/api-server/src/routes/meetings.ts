@@ -12,6 +12,7 @@ import {
   UpdateMeetingBody,
   UpdateMeetingParams,
   UpdateMeetingResponse,
+  DeleteMeetingParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -162,6 +163,32 @@ router.patch("/projects/:projectId/meetings/:meetingId", async (req, res): Promi
   }
 
   res.json(UpdateMeetingResponse.parse(updated));
+});
+
+// DELETE /projects/:projectId/meetings/:meetingId
+router.delete("/projects/:projectId/meetings/:meetingId", async (req, res): Promise<void> => {
+  const params = DeleteMeetingParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [deleted] = await db
+    .delete(meetingsTable)
+    .where(
+      and(
+        eq(meetingsTable.id, params.data.meetingId),
+        eq(meetingsTable.projectId, params.data.projectId),
+      ),
+    )
+    .returning();
+
+  if (!deleted) {
+    res.status(404).json({ error: "Meeting not found" });
+    return;
+  }
+
+  res.status(204).send();
 });
 
 export default router;

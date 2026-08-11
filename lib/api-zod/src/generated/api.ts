@@ -131,6 +131,17 @@ export const UpdateProjectResponse = zod.object({
 
 
 /**
+ * @summary Delete a meeting by ID
+ */
+export const DeleteMeetingParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+export const DeleteMeetingResponse = zod.void()
+
+
+/**
  * @summary Get a meeting by ID
  */
 export const GetMeetingParams = zod.object({
@@ -220,6 +231,18 @@ export const CreateMaterialResponse = zod.object({
   "status": zod.enum(['processing', 'ready', 'error']),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary Delete a material by ID
+ */
+export const DeleteMaterialParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number(),
+  "materialId": zod.coerce.number()
+})
+
+export const DeleteMaterialResponse = zod.void()
 
 
 /**

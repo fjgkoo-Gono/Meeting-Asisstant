@@ -193,6 +193,30 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /projects/{projectId}/meetings/{meetingId}:
+    delete:
+      operationId: deleteMeeting
+      tags: [meetings]
+      summary: Delete a meeting by ID
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Meeting deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     get:
       operationId: getMeeting
       tags: [meetings]
@@ -332,6 +356,37 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Project or meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/meetings/{meetingId}/materials/{materialId}:
+    delete:
+      operationId: deleteMaterial
+      tags: [materials]
+      summary: Delete a material by ID
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Material deleted
+        "404":
+          description: Not found
           content:
             application/json:
               schema:

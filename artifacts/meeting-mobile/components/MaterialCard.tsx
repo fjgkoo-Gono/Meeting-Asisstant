@@ -7,6 +7,7 @@ import type { Material } from '@workspace/api-client-react';
 interface Props {
   material: Material;
   onRetry?: () => void;
+  onDelete?: () => void;
 }
 
 const TYPE_ICONS: Record<string, string> = {
@@ -17,7 +18,7 @@ const TYPE_ICONS: Record<string, string> = {
   text: 'type',
 };
 
-export function MaterialCard({ material, onRetry }: Props) {
+export function MaterialCard({ material, onRetry, onDelete }: Props) {
   const colors = useColors();
   const icon = (TYPE_ICONS[material.type] ?? 'paperclip') as Parameters<typeof Feather>[0]['name'];
 
@@ -32,7 +33,9 @@ export function MaterialCard({ material, onRetry }: Props) {
     material.status === 'ready' ? 'Ready' : material.status === 'processing' ? 'Processing' : 'Failed';
 
   return (
-    <View
+    <Pressable
+      onLongPress={onDelete}
+      delayLongPress={400}
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
       <View style={[styles.iconBox, { backgroundColor: colors.muted }]}>
@@ -59,19 +62,33 @@ export function MaterialCard({ material, onRetry }: Props) {
           </Text>
         ) : null}
       </View>
-      {material.status === 'error' && onRetry ? (
-        <Pressable
-          onPress={onRetry}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.retryBtn,
-            { backgroundColor: colors.muted, opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          <Feather name="refresh-cw" size={14} color={colors.primary} />
-        </Pressable>
-      ) : null}
-    </View>
+      <View style={styles.actions}>
+        {material.status === 'error' && onRetry ? (
+          <Pressable
+            onPress={onRetry}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              { backgroundColor: colors.muted, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="refresh-cw" size={14} color={colors.primary} />
+          </Pressable>
+        ) : null}
+        {onDelete ? (
+          <Pressable
+            onPress={onDelete}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              { backgroundColor: colors.muted, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="trash-2" size={14} color={colors.destructive} />
+          </Pressable>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -128,12 +145,18 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontFamily: 'Inter_400Regular',
   },
-  retryBtn: {
+  actions: {
+    flexDirection: 'column',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  actionBtn: {
     width: 32,
     height: 32,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
   },
 });

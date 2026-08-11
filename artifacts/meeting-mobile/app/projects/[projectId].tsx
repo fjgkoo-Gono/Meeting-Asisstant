@@ -12,6 +12,7 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import {
   useListMeetings,
   useCreateMeeting,
   useUpdateProject,
+  useDeleteMeeting,
   getListMeetingsQueryKey,
   getGetProjectQueryKey,
 } from '@workspace/api-client-react';
@@ -77,6 +79,30 @@ export default function ProjectDetailScreen() {
       data: { name: editName.trim(), description: editDescription.trim() || null },
     });
   }
+  const { mutate: deleteMeeting } = useDeleteMeeting({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListMeetingsQueryKey(pid) });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
+    },
+  });
+
+  function handleDeleteMeeting(meetingId: number, title: string) {
+    Alert.alert(
+      'Delete Meeting',
+      `Are you sure you want to delete "${title}"? This will also remove all its materials.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteMeeting({ projectId: pid, meetingId }),
+        },
+      ],
+    );
+  }
+
   const {
     data: meetings = [],
     isLoading: loadingMeetings,
@@ -191,6 +217,7 @@ export default function ProjectDetailScreen() {
                   params: { meetingId: String(item.id), projectId: String(pid) },
                 })
               }
+              onLongPress={() => handleDeleteMeeting(item.id, item.title)}
             />
           )}
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 24 }]}

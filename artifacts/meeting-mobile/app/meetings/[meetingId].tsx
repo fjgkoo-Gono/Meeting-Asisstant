@@ -30,6 +30,7 @@ import {
   useCreateMaterial,
   useRetryMaterial,
   useUpdateMeeting,
+  useDeleteMaterial,
   getListMaterialsQueryKey,
   getGetMeetingQueryKey,
 } from '@workspace/api-client-react';
@@ -141,6 +142,30 @@ export default function MeetingDetailScreen() {
       },
     },
   });
+
+  const { mutate: deleteMaterial } = useDeleteMaterial({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
+    },
+  });
+
+  function handleDeleteMaterial(materialId: number, name: string) {
+    Alert.alert(
+      'Delete Material',
+      `Are you sure you want to delete "${name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteMaterial({ projectId: pid, meetingId: mid, materialId }),
+        },
+      ],
+    );
+  }
 
   // Text material modal
   const [showTextModal, setShowTextModal] = useState(false);
@@ -459,6 +484,7 @@ export default function MeetingDetailScreen() {
                       ? () => retryMaterial({ projectId: pid, meetingId: mid, materialId: item.id })
                       : undefined
                   }
+                  onDelete={() => handleDeleteMaterial(item.id, item.originalName)}
                 />
               )}
               contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 24 }]}
