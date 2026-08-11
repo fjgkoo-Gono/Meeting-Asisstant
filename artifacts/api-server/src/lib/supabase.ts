@@ -7,7 +7,12 @@ if (!url || !key) {
   throw new Error("SUPABASE_URL and SUPABASE_KEY environment variables are required");
 }
 
-export const supabase: SupabaseClient = createClient(url, key);
+// The Python backend stores SUPABASE_URL as the full REST endpoint
+// (e.g. https://xxx.supabase.co/rest/v1). The JS client only wants the
+// base project URL (https://xxx.supabase.co), so we strip any path.
+const baseUrl = new URL(url).origin;
+
+export const supabase: SupabaseClient = createClient(baseUrl, key);
 
 /** Convert a snake_case DB row to camelCase for the API layer */
 export function toCamel<T = Record<string, unknown>>(row: Record<string, unknown>): T {
