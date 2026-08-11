@@ -101,6 +101,33 @@ export default function ProjectsScreen() {
     });
   }
 
+  function hasEditChanges(): boolean {
+    if (!editingProject) return false;
+    return (
+      editName !== editingProject.name ||
+      editDescription !== (editingProject.description ?? '')
+    );
+  }
+
+  function handleCloseEditModal() {
+    if (hasEditChanges()) {
+      Alert.alert('Discard changes?', undefined, [
+        { text: 'Keep Editing', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            setShowEditModal(false);
+            setEditingProject(null);
+          },
+        },
+      ]);
+    } else {
+      setShowEditModal(false);
+      setEditingProject(null);
+    }
+  }
+
   const filtered = projects.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -284,7 +311,7 @@ export default function ProjectsScreen() {
         visible={showEditModal}
         animationType="slide"
         presentationStyle="formSheet"
-        onRequestClose={() => setShowEditModal(false)}
+        onRequestClose={handleCloseEditModal}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -292,7 +319,7 @@ export default function ProjectsScreen() {
         >
           <View style={[styles.modal, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
+              <Pressable onPress={handleCloseEditModal} hitSlop={8}>
                 <Feather name="x" size={22} color={colors.foreground} />
               </Pressable>
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>

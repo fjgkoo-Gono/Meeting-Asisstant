@@ -79,6 +79,29 @@ export default function ProjectDetailScreen() {
       data: { name: editName.trim(), description: editDescription.trim() || null },
     });
   }
+
+  function hasEditChanges(): boolean {
+    if (!project) return false;
+    return (
+      editName !== project.name ||
+      editDescription !== (project.description ?? '')
+    );
+  }
+
+  function handleCloseEditModal() {
+    if (hasEditChanges()) {
+      Alert.alert('Discard changes?', undefined, [
+        { text: 'Keep Editing', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => setShowEditModal(false),
+        },
+      ]);
+    } else {
+      setShowEditModal(false);
+    }
+  }
   const { mutate: deleteMeeting } = useDeleteMeeting({
     mutation: {
       onSuccess: () => {
@@ -237,7 +260,7 @@ export default function ProjectDetailScreen() {
         visible={showEditModal}
         animationType="slide"
         presentationStyle="formSheet"
-        onRequestClose={() => setShowEditModal(false)}
+        onRequestClose={handleCloseEditModal}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -245,7 +268,7 @@ export default function ProjectDetailScreen() {
         >
           <View style={[styles.modal, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
+              <Pressable onPress={handleCloseEditModal} hitSlop={8}>
                 <Feather name="x" size={22} color={colors.foreground} />
               </Pressable>
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
