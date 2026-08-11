@@ -1,28 +1,30 @@
-import { pool } from "@workspace/db";
+import { supabase } from "./supabase";
 import { logger } from "./logger";
 
 /**
- * Ensure all required tables exist before the server starts accepting requests.
- * This uses idempotent CREATE TABLE IF NOT EXISTS so it is safe to run on every boot.
+ * Verify the Supabase connection is alive and tables exist before accepting requests.
+ * Tables must be created in Supabase SQL Editor — see scripts/supabase-schema.sql.
  */
 export async function runMigrations(): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS chat_messages (
-        id          SERIAL PRIMARY KEY,
-        context_type TEXT    NOT NULL,
-        context_id   INTEGER NOT NULL,
-        role         TEXT    NOT NULL,
-        content      TEXT    NOT NULL,
-        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-    logger.info("DB migrations applied (chat_messages ensured)");
-  } catch (err) {
-    logger.error({ err }, "Failed to apply DB migrations");
-    throw err;
-  } finally {
-    client.release();
+  const { error } = await supabase.from("projects").select("id").limit(1);
+
+  if (!error || error.code === "PGRST116") {
+    // PGRST116 = no rows — connection OK, table exists but is empty
+    logger.info("Supabase connection verified ✓");
+    return;
   }
+
+  if (error.code === "PGRST125" || error.code === "42P01") {
+    // Table doesn't exist — user needs to run the schema SQL
+    const msg =
+      "Database tables not found in Supabase. " +
+      "Please run scripts/supabase-schema.sql in the Supabase SQL Editor " +
+      "(supabase.com → your project → SQL Editor), then restart the server.";
+    logger.error({ error }, msg);
+    throw new Error(msg);
+  }
+
+  // Any other error (auth, network, etc.)
+  logger.error({ error }, "Supabase connection check failed");
+  throw new Error(`Supabase connection check failed: ${error.message} (code: ${error.code})`);
 }

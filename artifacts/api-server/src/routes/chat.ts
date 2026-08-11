@@ -1,22 +1,14 @@
 import { Router, type IRouter, type Response } from "express";
-import { eq, and, asc } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
-import {
-  db,
-  projectsTable,
-  meetingsTable,
-  materialsTable,
-  chatMessagesTable,
-} from "@workspace/db";
+import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 const MODEL = "claude-sonnet-4-5";
 
-// ── System prompt ────────────────────────────────────────────────────────────
+// ── System prompt ─────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(scope: "meeting" | "project"): string {
   return `Eres un asistente inteligente especializado en analizar materiales de reuniones de trabajo.
@@ -33,30 +25,34 @@ REGLAS IMPORTANTES:
 7. Si los materiales no tienen texto extraído (están en procesamiento o fallaron), indícalo.`;
 }
 
-// ── Context builders ─────────────────────────────────────────────────────────
+// ── Context builders ──────────────────────────────────────────────────────────
 
 async function buildMeetingContext(
   projectId: number,
   meetingId: number,
 ): Promise<{ context: string; valid: boolean; error?: string }> {
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, projectId));
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .single();
   if (!project) return { context: "", valid: false, error: "Project not found" };
 
-  const [meeting] = await db
-    .select()
-    .from(meetingsTable)
-    .where(and(eq(meetingsTable.id, meetingId), eq(meetingsTable.projectId, projectId)));
+  const { data: meeting } = await supabase
+    .from("meetings")
+    .select("*")
+    .eq("id", meetingId)
+    .eq("project_id", projectId)
+    .single();
   if (!meeting) return { context: "", valid: false, error: "Meeting not found" };
 
-  const materials = await db
-    .select()
-    .from(materialsTable)
-    .where(eq(materialsTable.meetingId, meetingId))
-    .orderBy(asc(materialsTable.createdAt));
+  const { data: materials } = await supabase
+    .from("materials")
+    .select("*")
+    .eq("meeting_id", meetingId)
+    .order("created_at", { ascending: true });
 
+  const mats = materials ?? [];
   const lines: string[] = [
     `# Proyecto: ${project.name}`,
     project.description ? `Descripción del proyecto: ${project.description}` : "",
@@ -65,76 +61,67 @@ async function buildMeetingContext(
     `Fecha: ${meeting.date}`,
     meeting.notes ? `Notas de la reunión:\n${meeting.notes}` : "Sin notas.",
     "",
-    `### Materiales de la reunión (${materials.length} total):`,
+    `### Materiales de la reunión (${mats.length} total):`,
   ];
 
-  if (materials.length === 0) {
+  if (mats.length === 0) {
     lines.push("No hay materiales en esta reunión.");
   } else {
-    for (const m of materials) {
-      lines.push(`\n#### Material: ${m.originalName} (tipo: ${m.type})`);
-      if (m.status === "processing") {
-        lines.push("[Aún en procesamiento — texto no disponible]");
-      } else if (m.status === "error") {
-        lines.push("[Error al extraer el texto de este material]");
-      } else if (m.extractedText) {
-        lines.push(m.extractedText.slice(0, 8000)); // cap per material
-      } else {
-        lines.push("[Sin texto extraído]");
-      }
+    for (const m of mats) {
+      lines.push(`\n#### Material: ${m.original_name} (tipo: ${m.type})`);
+      if (m.status === "processing") lines.push("[Aún en procesamiento — texto no disponible]");
+      else if (m.status === "error") lines.push("[Error al extraer el texto de este material]");
+      else if (m.extracted_text) lines.push(m.extracted_text.slice(0, 8000));
+      else lines.push("[Sin texto extraído]");
     }
   }
 
-  return { context: lines.filter(l => l !== undefined).join("\n"), valid: true };
+  return { context: lines.filter(Boolean).join("\n"), valid: true };
 }
 
 async function buildProjectContext(
   projectId: number,
 ): Promise<{ context: string; valid: boolean; error?: string }> {
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, projectId));
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .single();
   if (!project) return { context: "", valid: false, error: "Project not found" };
 
-  const meetings = await db
-    .select()
-    .from(meetingsTable)
-    .where(eq(meetingsTable.projectId, projectId))
-    .orderBy(asc(meetingsTable.date));
+  const { data: meetings } = await supabase
+    .from("meetings")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("date", { ascending: true });
 
   const lines: string[] = [
     `# Proyecto: ${project.name}`,
     project.description ? `Descripción del proyecto: ${project.description}` : "",
     "",
-    `## Reuniones del proyecto (${meetings.length} total, ordenadas cronológicamente):`,
+    `## Reuniones del proyecto (${(meetings ?? []).length} total, ordenadas cronológicamente):`,
   ];
 
-  for (const meeting of meetings) {
+  for (const meeting of meetings ?? []) {
     lines.push(`\n### Reunión: "${meeting.title}" — Fecha: ${meeting.date}`);
     if (meeting.notes) lines.push(`Notas:\n${meeting.notes}`);
 
-    const materials = await db
-      .select()
-      .from(materialsTable)
-      .where(eq(materialsTable.meetingId, meeting.id))
-      .orderBy(asc(materialsTable.createdAt));
+    const { data: materials } = await supabase
+      .from("materials")
+      .select("*")
+      .eq("meeting_id", meeting.id)
+      .order("created_at", { ascending: true });
 
-    if (materials.length === 0) {
+    const mats = materials ?? [];
+    if (mats.length === 0) {
       lines.push("(Sin materiales adjuntos)");
     } else {
-      for (const m of materials) {
-        lines.push(`\n#### Material: ${m.originalName} (tipo: ${m.type})`);
-        if (m.status === "processing") {
-          lines.push("[Aún en procesamiento]");
-        } else if (m.status === "error") {
-          lines.push("[Error al extraer]");
-        } else if (m.extractedText) {
-          // per-material cap to keep total context manageable
-          lines.push(m.extractedText.slice(0, 4000));
-        } else {
-          lines.push("[Sin texto extraído]");
-        }
+      for (const m of mats) {
+        lines.push(`\n#### Material: ${m.original_name} (tipo: ${m.type})`);
+        if (m.status === "processing") lines.push("[Aún en procesamiento]");
+        else if (m.status === "error") lines.push("[Error al extraer]");
+        else if (m.extracted_text) lines.push(m.extracted_text.slice(0, 4000));
+        else lines.push("[Sin texto extraído]");
       }
     }
   }
@@ -142,7 +129,7 @@ async function buildProjectContext(
   return { context: lines.join("\n"), valid: true };
 }
 
-// ── Helper: save messages ────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function saveChatMessage(
   contextType: "meeting" | "project",
@@ -150,10 +137,10 @@ async function saveChatMessage(
   role: "user" | "assistant",
   content: string,
 ) {
-  await db.insert(chatMessagesTable).values({ contextType, contextId, role, content });
+  await supabase
+    .from("chat_messages")
+    .insert({ context_type: contextType, context_id: contextId, role, content });
 }
-
-// ── Helper: SSE send ─────────────────────────────────────────────────────────
 
 function sendSSE(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -166,28 +153,20 @@ router.get(
   async (req, res): Promise<void> => {
     const projectId = Number(req.params.projectId);
     const meetingId = Number(req.params.meetingId);
+    if (!projectId || !meetingId) { res.status(400).json({ error: "Invalid IDs" }); return; }
 
-    if (!projectId || !meetingId) {
-      res.status(400).json({ error: "Invalid IDs" });
-      return;
-    }
+    const { data } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("context_type", "meeting")
+      .eq("context_id", meetingId)
+      .order("created_at", { ascending: true });
 
-    const messages = await db
-      .select()
-      .from(chatMessagesTable)
-      .where(
-        and(
-          eq(chatMessagesTable.contextType, "meeting"),
-          eq(chatMessagesTable.contextId, meetingId),
-        ),
-      )
-      .orderBy(asc(chatMessagesTable.createdAt));
-
-    res.json(messages);
+    res.json(data ?? []);
   },
 );
 
-// ── POST /projects/:projectId/meetings/:meetingId/chat ───────────────────────
+// ── POST /projects/:projectId/meetings/:meetingId/chat ────────────────────────
 
 router.post(
   "/projects/:projectId/meetings/:meetingId/chat",
@@ -199,33 +178,24 @@ router.post(
       history?: { role: "user" | "assistant"; content: string }[];
     };
 
-    if (!message?.trim()) {
-      res.status(400).json({ error: "message is required" });
-      return;
-    }
+    if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
 
     const { context, valid, error } = await buildMeetingContext(projectId, meetingId);
-    if (!valid) {
-      res.status(404).json({ error });
-      return;
-    }
+    if (!valid) { res.status(404).json({ error }); return; }
 
-    // Save user message
     await saveChatMessage("meeting", meetingId, "user", message);
 
-    // Set up SSE
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
     const claudeMessages: Anthropic.Messages.MessageParam[] = [
-      ...history.map(h => ({ role: h.role, content: h.content })),
+      ...history.map((h) => ({ role: h.role, content: h.content })),
       { role: "user", content: message },
     ];
 
     let fullResponse = "";
-
     try {
       const stream = anthropic.messages.stream({
         model: MODEL,
@@ -235,13 +205,9 @@ router.post(
       });
 
       for await (const chunk of stream) {
-        if (
-          chunk.type === "content_block_delta" &&
-          chunk.delta.type === "text_delta"
-        ) {
-          const text = chunk.delta.text;
-          fullResponse += text;
-          sendSSE(res, "delta", { text });
+        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+          fullResponse += chunk.delta.text;
+          sendSSE(res, "delta", { text: chunk.delta.text });
         }
       }
 
@@ -260,23 +226,16 @@ router.post(
 
 router.get("/projects/:projectId/chat", async (req, res): Promise<void> => {
   const projectId = Number(req.params.projectId);
-  if (!projectId) {
-    res.status(400).json({ error: "Invalid project ID" });
-    return;
-  }
+  if (!projectId) { res.status(400).json({ error: "Invalid project ID" }); return; }
 
-  const messages = await db
-    .select()
-    .from(chatMessagesTable)
-    .where(
-      and(
-        eq(chatMessagesTable.contextType, "project"),
-        eq(chatMessagesTable.contextId, projectId),
-      ),
-    )
-    .orderBy(asc(chatMessagesTable.createdAt));
+  const { data } = await supabase
+    .from("chat_messages")
+    .select("*")
+    .eq("context_type", "project")
+    .eq("context_id", projectId)
+    .order("created_at", { ascending: true });
 
-  res.json(messages);
+  res.json(data ?? []);
 });
 
 // ── POST /projects/:projectId/chat ────────────────────────────────────────────
@@ -288,33 +247,24 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
     history?: { role: "user" | "assistant"; content: string }[];
   };
 
-  if (!message?.trim()) {
-    res.status(400).json({ error: "message is required" });
-    return;
-  }
+  if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
 
   const { context, valid, error } = await buildProjectContext(projectId);
-  if (!valid) {
-    res.status(404).json({ error });
-    return;
-  }
+  if (!valid) { res.status(404).json({ error }); return; }
 
-  // Save user message
   await saveChatMessage("project", projectId, "user", message);
 
-  // Set up SSE
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
 
   const claudeMessages: Anthropic.Messages.MessageParam[] = [
-    ...history.map(h => ({ role: h.role, content: h.content })),
+    ...history.map((h) => ({ role: h.role, content: h.content })),
     { role: "user", content: message },
   ];
 
   let fullResponse = "";
-
   try {
     const stream = anthropic.messages.stream({
       model: MODEL,
@@ -324,13 +274,9 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
     });
 
     for await (const chunk of stream) {
-      if (
-        chunk.type === "content_block_delta" &&
-        chunk.delta.type === "text_delta"
-      ) {
-        const text = chunk.delta.text;
-        fullResponse += text;
-        sendSSE(res, "delta", { text });
+      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+        fullResponse += chunk.delta.text;
+        sendSSE(res, "delta", { text: chunk.delta.text });
       }
     }
 

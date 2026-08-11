@@ -1,12 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, count, max, sql } from "drizzle-orm";
-import { db, projectsTable, meetingsTable } from "@workspace/db";
+import { supabase, toCamel, rowsToCamel } from "../lib/supabase";
 import {
   CreateProjectBody,
   GetProjectParams,
   GetProjectResponse,
   CreateProjectResponse,
-  ListProjectsResponseItem,
   ListProjectsResponse,
   GetProjectSummaryParams,
   GetProjectSummaryResponse,
@@ -20,87 +18,64 @@ const router: IRouter = Router();
 
 // GET /projects
 router.get("/projects", async (_req, res): Promise<void> => {
-  const projects = await db
-    .select()
-    .from(projectsTable)
-    .orderBy(desc(projectsTable.createdAt));
-  res.json(ListProjectsResponse.parse(projects));
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(ListProjectsResponse.parse(rowsToCamel(data ?? [])));
 });
 
 // POST /projects
 router.post("/projects", async (req, res): Promise<void> => {
   const parsed = CreateProjectBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const [project] = await db
-    .insert(projectsTable)
-    .values({
-      name: parsed.data.name,
-      description: parsed.data.description ?? null,
-    })
-    .returning();
-
-  res.status(201).json(CreateProjectResponse.parse(project));
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({ name: parsed.data.name, description: parsed.data.description ?? null })
+    .select()
+    .single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(201).json(CreateProjectResponse.parse(toCamel(data)));
 });
 
 // GET /projects/:projectId
 router.get("/projects/:projectId", async (req, res): Promise<void> => {
   const params = GetProjectParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, params.data.projectId));
-
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
-
-  res.json(GetProjectResponse.parse(project));
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", params.data.projectId)
+    .single();
+  if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json(GetProjectResponse.parse(toCamel(data)));
 });
 
 // DELETE /projects/:projectId
 router.delete("/projects/:projectId", async (req, res): Promise<void> => {
   const params = GetProjectParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [deleted] = await db
-    .delete(projectsTable)
-    .where(eq(projectsTable.id, params.data.projectId))
-    .returning();
-
-  if (!deleted) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
-
+  const { data, error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", params.data.projectId)
+    .select()
+    .single();
+  if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
   res.status(204).send();
 });
 
 // PATCH /projects/:projectId
 router.patch("/projects/:projectId", async (req, res): Promise<void> => {
   const params = UpdateProjectParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const body = UpdateProjectBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const updates: Record<string, unknown> = {};
   if (body.data.name !== undefined) updates.name = body.data.name;
@@ -111,85 +86,87 @@ router.patch("/projects/:projectId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [updated] = await db
-    .update(projectsTable)
-    .set(updates)
-    .where(eq(projectsTable.id, params.data.projectId))
-    .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
-
-  res.json(UpdateProjectResponse.parse(updated));
+  const { data, error } = await supabase
+    .from("projects")
+    .update(updates)
+    .eq("id", params.data.projectId)
+    .select()
+    .single();
+  if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json(UpdateProjectResponse.parse(toCamel(data)));
 });
 
 // GET /projects/:projectId/summary
 router.get("/projects/:projectId/summary", async (req, res): Promise<void> => {
   const params = GetProjectSummaryParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, params.data.projectId));
+  const { data: project, error: pErr } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", params.data.projectId)
+    .single();
+  if (pErr || !project) { res.status(404).json({ error: "Project not found" }); return; }
 
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
+  const { data: meetings } = await supabase
+    .from("meetings")
+    .select("id, date")
+    .eq("project_id", params.data.projectId);
 
-  const [stats] = await db
-    .select({
-      meetingCount: count(meetingsTable.id),
-      latestMeetingDate: max(meetingsTable.date),
-    })
-    .from(meetingsTable)
-    .where(eq(meetingsTable.projectId, params.data.projectId));
+  const meetingList = meetings ?? [];
+  const latestMeetingDate = meetingList.length
+    ? meetingList.map((m: { date: string }) => m.date).sort().reverse()[0]
+    : null;
 
   res.json(
     GetProjectSummaryResponse.parse({
       id: project.id,
       name: project.name,
       description: project.description,
-      meetingCount: stats?.meetingCount ?? 0,
-      latestMeetingDate: stats?.latestMeetingDate ?? null,
-      createdAt: project.createdAt,
+      meetingCount: meetingList.length,
+      latestMeetingDate,
+      createdAt: project.created_at,
     }),
   );
 });
 
 // GET /stats
 router.get("/stats", async (_req, res): Promise<void> => {
-  const [totalProjectsRow] = await db
-    .select({ count: count() })
-    .from(projectsTable);
+  const [
+    { count: totalProjects },
+    { count: totalMeetings },
+    { data: recentMeetingRows },
+  ] = await Promise.all([
+    supabase.from("projects").select("*", { count: "exact", head: true }),
+    supabase.from("meetings").select("*", { count: "exact", head: true }),
+    supabase
+      .from("meetings")
+      .select("id, project_id, title, date")
+      .order("date", { ascending: false })
+      .limit(5),
+  ]);
 
-  const [totalMeetingsRow] = await db
-    .select({ count: count() })
-    .from(meetingsTable);
+  // Fetch project names for the recent meetings
+  const projectIds = [...new Set((recentMeetingRows ?? []).map((m: { project_id: number }) => m.project_id))];
+  const { data: projectRows } = projectIds.length
+    ? await supabase.from("projects").select("id, name").in("id", projectIds)
+    : { data: [] };
+  const projectMap = Object.fromEntries(
+    (projectRows ?? []).map((p: { id: number; name: string }) => [p.id, p.name]),
+  );
 
-  const recentMeetings = await db
-    .select({
-      id: meetingsTable.id,
-      projectId: meetingsTable.projectId,
-      title: meetingsTable.title,
-      date: meetingsTable.date,
-      projectName: projectsTable.name,
-    })
-    .from(meetingsTable)
-    .innerJoin(projectsTable, eq(meetingsTable.projectId, projectsTable.id))
-    .orderBy(desc(meetingsTable.date))
-    .limit(5);
+  const recentMeetings = (recentMeetingRows ?? []).map((m: { id: number; project_id: number; title: string; date: string }) => ({
+    id: m.id,
+    projectId: m.project_id,
+    title: m.title,
+    date: m.date,
+    projectName: projectMap[m.project_id] ?? "",
+  }));
 
   res.json(
     GetStatsResponse.parse({
-      totalProjects: totalProjectsRow?.count ?? 0,
-      totalMeetings: totalMeetingsRow?.count ?? 0,
+      totalProjects: totalProjects ?? 0,
+      totalMeetings: totalMeetings ?? 0,
       recentMeetings,
     }),
   );

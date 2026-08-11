@@ -1,9 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { db, meetingsTable, projectsTable, materialsTable } from "@workspace/db";
+import { supabase, toCamel, rowsToCamel } from "../lib/supabase";
 import {
   ListMaterialsParams,
   ListMaterialsResponse,
@@ -44,18 +43,23 @@ const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel"];
 type ResolveError = { ok: false; error: string; status: 404 };
 type ResolveSuccess = { ok: true };
 
-// Resolve parent meeting ensuring project scoping
-async function resolveMeeting(projectId: number, meetingId: number): Promise<ResolveError | ResolveSuccess> {
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, projectId));
+async function resolveMeeting(
+  projectId: number,
+  meetingId: number,
+): Promise<ResolveError | ResolveSuccess> {
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .single();
   if (!project) return { ok: false, error: "Project not found", status: 404 };
 
-  const [meeting] = await db
-    .select()
-    .from(meetingsTable)
-    .where(and(eq(meetingsTable.id, meetingId), eq(meetingsTable.projectId, projectId)));
+  const { data: meeting } = await supabase
+    .from("meetings")
+    .select("id")
+    .eq("id", meetingId)
+    .eq("project_id", projectId)
+    .single();
   if (!meeting) return { ok: false, error: "Meeting not found", status: 404 };
 
   return { ok: true };
@@ -66,74 +70,57 @@ router.get(
   "/projects/:projectId/meetings/:meetingId/materials",
   async (req, res): Promise<void> => {
     const params = ListMaterialsParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
     const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
-    if (!resolved.ok) {
-      res.status(resolved.status).json({ error: resolved.error });
-      return;
-    }
+    if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
-    const materials = await db
-      .select()
-      .from(materialsTable)
-      .where(eq(materialsTable.meetingId, params.data.meetingId))
-      .orderBy(desc(materialsTable.createdAt));
-
-    res.json(ListMaterialsResponse.parse(materials));
+    const { data, error } = await supabase
+      .from("materials")
+      .select("*")
+      .eq("meeting_id", params.data.meetingId)
+      .order("created_at", { ascending: false });
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json(ListMaterialsResponse.parse(rowsToCamel(data ?? [])));
   },
 );
 
 // POST /projects/:projectId/meetings/:meetingId/materials
-// Accepts:
-//   - multipart/form-data with file + type (photo|image|pdf|excel)
-//   - application/json with type=text + content + optional name
 router.post(
   "/projects/:projectId/meetings/:meetingId/materials",
   upload.single("file"),
   async (req, res): Promise<void> => {
     const params = CreateMaterialParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
     const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
-    if (!resolved.ok) {
-      res.status(resolved.status).json({ error: resolved.error });
-      return;
-    }
+    if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
     const rawType = req.body?.type as string | undefined;
 
-    // ── Text / transcription path (JSON body) ──────────────────────────────
+    // ── Text / transcription path ──────────────────────────────────────────
     if (rawType === "text") {
       const body = CreateMaterialBody.safeParse(req.body);
-      if (!body.success) {
-        res.status(400).json({ error: body.error.message });
-        return;
-      }
+      if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
-      const [material] = await db
-        .insert(materialsTable)
-        .values({
-          meetingId: params.data.meetingId,
+      const { data, error } = await supabase
+        .from("materials")
+        .insert({
+          meeting_id: params.data.meetingId,
           type: "text",
           filename: "",
-          originalName: body.data.name ?? "Transcription",
-          extractedText: body.data.content,
+          original_name: body.data.name ?? "Transcription",
+          extracted_text: body.data.content,
           status: "ready",
         })
-        .returning();
-
-      res.status(201).json(CreateMaterialResponse.parse(material));
+        .select()
+        .single();
+      if (error) { res.status(500).json({ error: error.message }); return; }
+      res.status(201).json(CreateMaterialResponse.parse(toCamel(data)));
       return;
     }
 
-    // ── File upload path (multipart/form-data) ─────────────────────────────
+    // ── File upload path ───────────────────────────────────────────────────
     if (!rawType || !FILE_MATERIAL_TYPES.includes(rawType as MaterialType)) {
       res.status(400).json({
         error: `Invalid type. Must be one of: ${[...FILE_MATERIAL_TYPES, "text"].join(", ")}`,
@@ -148,37 +135,40 @@ router.post(
 
     const materialType = rawType as MaterialType;
 
-    const [material] = await db
-      .insert(materialsTable)
-      .values({
-        meetingId: params.data.meetingId,
+    const { data, error } = await supabase
+      .from("materials")
+      .insert({
+        meeting_id: params.data.meetingId,
         type: materialType,
         filename: req.file.filename,
-        originalName: req.file.originalname,
-        extractedText: null,
+        original_name: req.file.originalname,
+        extracted_text: null,
         status: "processing",
       })
-      .returning();
+      .select()
+      .single();
+    if (error) { res.status(500).json({ error: error.message }); return; }
 
-    res.status(201).json(CreateMaterialResponse.parse(material));
+    res.status(201).json(CreateMaterialResponse.parse(toCamel(data)));
 
     // Async extraction after response
+    const materialId = data.id;
     setImmediate(async () => {
       try {
         const text = await extractText(
           path.join(UPLOADS_DIR, req.file!.filename),
           materialType,
         );
-        await db
-          .update(materialsTable)
-          .set({ extractedText: text, status: "ready" })
-          .where(eq(materialsTable.id, material.id));
+        await supabase
+          .from("materials")
+          .update({ extracted_text: text, status: "ready" })
+          .eq("id", materialId);
       } catch (err) {
-        logger.error({ err, materialId: material.id }, "Failed to extract text from material");
-        await db
-          .update(materialsTable)
-          .set({ status: "error" })
-          .where(eq(materialsTable.id, material.id));
+        logger.error({ err, materialId }, "Failed to extract text from material");
+        await supabase
+          .from("materials")
+          .update({ status: "error" })
+          .eq("id", materialId);
       }
     });
   },
@@ -189,61 +179,52 @@ router.post(
   "/projects/:projectId/meetings/:meetingId/materials/:materialId/retry",
   async (req, res): Promise<void> => {
     const params = RetryMaterialParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
     const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
-    if (!resolved.ok) {
-      res.status(resolved.status).json({ error: resolved.error });
-      return;
-    }
+    if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
-    const [material] = await db
-      .select()
-      .from(materialsTable)
-      .where(
-        and(
-          eq(materialsTable.id, params.data.materialId),
-          eq(materialsTable.meetingId, params.data.meetingId),
-        ),
-      );
+    const { data: material } = await supabase
+      .from("materials")
+      .select("*")
+      .eq("id", params.data.materialId)
+      .eq("meeting_id", params.data.meetingId)
+      .single();
 
-    if (!material) {
-      res.status(404).json({ error: "Material not found" });
-      return;
-    }
+    if (!material) { res.status(404).json({ error: "Material not found" }); return; }
 
     if (material.type === "text" || !material.filename) {
       res.status(400).json({ error: "Cannot retry text materials" });
       return;
     }
 
-    const [updated] = await db
-      .update(materialsTable)
-      .set({ status: "processing", extractedText: null })
-      .where(eq(materialsTable.id, params.data.materialId))
-      .returning();
+    const { data: updated, error } = await supabase
+      .from("materials")
+      .update({ status: "processing", extracted_text: null })
+      .eq("id", params.data.materialId)
+      .select()
+      .single();
+    if (error) { res.status(500).json({ error: error.message }); return; }
 
-    res.json(RetryMaterialResponse.parse(updated));
+    res.json(RetryMaterialResponse.parse(toCamel(updated)));
 
+    const materialId = params.data.materialId;
     setImmediate(async () => {
       try {
         const text = await extractText(
           path.join(UPLOADS_DIR, material.filename),
           material.type as MaterialType,
         );
-        await db
-          .update(materialsTable)
-          .set({ extractedText: text, status: "ready" })
-          .where(eq(materialsTable.id, params.data.materialId));
+        await supabase
+          .from("materials")
+          .update({ extracted_text: text, status: "ready" })
+          .eq("id", materialId);
       } catch (err) {
-        logger.error({ err, materialId: params.data.materialId }, "Retry extraction failed");
-        await db
-          .update(materialsTable)
-          .set({ status: "error" })
-          .where(eq(materialsTable.id, params.data.materialId));
+        logger.error({ err, materialId }, "Retry extraction failed");
+        await supabase
+          .from("materials")
+          .update({ status: "error" })
+          .eq("id", materialId);
       }
     });
   },
@@ -254,33 +235,21 @@ router.delete(
   "/projects/:projectId/meetings/:meetingId/materials/:materialId",
   async (req, res): Promise<void> => {
     const params = DeleteMaterialParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
     const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
-    if (!resolved.ok) {
-      res.status(resolved.status).json({ error: resolved.error });
-      return;
-    }
+    if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
-    const [deleted] = await db
-      .delete(materialsTable)
-      .where(
-        and(
-          eq(materialsTable.id, params.data.materialId),
-          eq(materialsTable.meetingId, params.data.meetingId),
-        ),
-      )
-      .returning();
+    const { data: deleted, error } = await supabase
+      .from("materials")
+      .delete()
+      .eq("id", params.data.materialId)
+      .eq("meeting_id", params.data.meetingId)
+      .select()
+      .single();
 
-    if (!deleted) {
-      res.status(404).json({ error: "Material not found" });
-      return;
-    }
+    if (error || !deleted) { res.status(404).json({ error: "Material not found" }); return; }
 
-    // Clean up the uploaded file if it exists
     if (deleted.filename) {
       const filePath = path.join(UPLOADS_DIR, deleted.filename);
       fs.unlink(filePath, (err) => {
