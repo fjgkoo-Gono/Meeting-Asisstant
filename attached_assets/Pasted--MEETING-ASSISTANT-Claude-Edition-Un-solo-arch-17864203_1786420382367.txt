@@ -1,0 +1,779 @@
+# ============================================
+# MEETING ASSISTANT - Claude Edition
+# Un solo archivo para Replit
+# Servicios: Anthropic (Claude) + Supabase + Cloudinary
+# ============================================
+
+import os
+import json
+import base64
+import uuid
+from datetime import datetime
+from typing import List, Dict, Optional
+from contextlib import contextmanager
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# ─── Cargar variables de entorno ───
+load_dotenv()
+
+# ─── CONFIGURACIÓN ───
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+
+CLAUDE_MODEL = "claude-sonnet-5-20250601"
+
+# ─── INICIALIZAR SUPABASE (con fallback a SQLite) ───
+use_supabase = bool(SUPABASE_URL and SUPABASE_KEY)
+db = None
+
+if use_supabase:
+    try:
+        from supabase import create_client
+        db = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Conectado a Supabase")
+    except Exception as e:
+        print(f"⚠️ Error conectando a Supabase: {e}")
+        use_supabase = False
+
+# Fallback a SQLite si Supabase no está configurado
+if not use_supabase:
+    import sqlite3
+    SQLITE_DB = "meetings.db"
+    
+    def init_sqlite():
+        conn = sqlite3.connect(SQLITE_DB)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS meetings (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                project_id TEXT DEFAULT 'default',
+                created_at TEXT,
+                status TEXT DEFAULT 'active',
+                transcript TEXT DEFAULT '',
+                images TEXT DEFAULT '[]',
+                notes TEXT DEFAULT '[]',
+                documents TEXT DEFAULT '[]',
+                summary TEXT DEFAULT '',
+                action_items TEXT DEFAULT '[]'
+            )
+        ''')
+        conn.commit()
+        conn.close()
+    
+    init_sqlite()
+    print("✅ Usando SQLite local como fallback")
+
+# ─── INICIALIZAR CLOUDINARY ───
+cloudinary_available = False
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    try:
+        import cloudinary
+        import cloudinary.uploader
+        cloudinary.config(
+            cloud_name=CLOUDINARY_CLOUD_NAME,
+            api_key=CLOUDINARY_API_KEY,
+            api_secret=CLOUDINARY_API_SECRET
+        )
+        cloudinary_available = True
+        print("✅ Cloudinary configurado")
+    except Exception as e:
+        print(f"⚠️ Error configurando Cloudinary: {e}")
+
+# ─── INICIALIZAR ANTHROPIC ───
+anthropic_available = False
+client = None
+if ANTHROPIC_API_KEY:
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        anthropic_available = True
+        print("✅ Anthropic Claude listo")
+    except Exception as e:
+        print(f"⚠️ Error conectando a Anthropic: {e}")
+
+# ============================================
+# BASE DE DATOS (Supabase o SQLite)
+# ============================================
+
+class MeetingDB:
+    @classmethod
+    def _to_dict(cls, row, columns):
+        if not row:
+            return None
+        return {col: row[i] for i, col in enumerate(columns)}
+    
+    @classmethod
+    def create(cls, title: str, project_id: str = "default"):
+        meeting_id = str(uuid.uuid4())[:8]
+        now = datetime.utcnow().isoformat()
+        
+        if use_supabase:
+            data = {
+                "id": meeting_id, "title": title, "project_id": project_id,
+                "created_at": now, "status": "active", "transcript": "",
+                "images": [], "notes": [], "documents": [],
+                "summary": "", "action_items": []
+            }
+            db.table("meetings").insert(data).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_DB)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO meetings (id, title, project_id, created_at, status, transcript, images, notes, documents, summary, action_items)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (meeting_id, title, project_id, now, "active", "[]", "[]", "[]", "[]", "", "[]"))
+            conn.commit()
+            conn.close()
+        return meeting_id
+    
+    @classmethod
+    def get(cls, meeting_id: str):
+        if use_supabase:
+            result = db.table("meetings").select("*").eq("id", meeting_id).execute()
+            return result.data[0] if result.data else None
+        else:
+            conn = sqlite3.connect(SQLITE_DB)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,))
+            row = c.fetchone()
+            conn.close()
+            if row:
+                return dict(row)
+            return None
+    
+    @classmethod
+    def update(cls, meeting_id: str, data: dict):
+        if use_supabase:
+            db.table("meetings").update(data).eq("id", meeting_id).execute()
+        else:
+            conn = sqlite3.connect(SQLITE_DB)
+            c = conn.cursor()
+            for key, value in data.items():
+                if isinstance(value, (list, dict)):
+                    value = json.dumps(value)
+                c.execute(f"UPDATE meetings SET {key} = ? WHERE id = ?", (value, meeting_id))
+            conn.commit()
+            conn.close()
+    
+    @classmethod
+    def _get_json_field(cls, meeting_id: str, field: str):
+        meeting = cls.get(meeting_id)
+        if not meeting:
+            return []
+        val = meeting.get(field, "[]")
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except:
+                return []
+        return val if val else []
+    
+    @classmethod
+    def add_note(cls, meeting_id: str, text: str):
+        notes = cls._get_json_field(meeting_id, "notes")
+        notes.append({"text": text, "added_at": datetime.utcnow().isoformat()})
+        cls.update(meeting_id, {"notes": notes})
+    
+    @classmethod
+    def add_image(cls, meeting_id: str, url: str, analysis: str):
+        images = cls._get_json_field(meeting_id, "images")
+        images.append({
+            "url": url, "ocr_text": analysis,
+            "added_at": datetime.utcnow().isoformat()
+        })
+        cls.update(meeting_id, {"images": images})
+    
+    @classmethod
+    def set_transcript(cls, meeting_id: str, text: str):
+        cls.update(meeting_id, {"transcript": text})
+    
+    @classmethod
+    def set_summary(cls, meeting_id: str, summary: str):
+        cls.update(meeting_id, {"summary": summary})
+    
+    @classmethod
+    def set_action_items(cls, meeting_id: str, items: list):
+        cls.update(meeting_id, {"action_items": items})
+    
+    @classmethod
+    def list_by_project(cls, project_id: str):
+        if use_supabase:
+            result = db.table("meetings").select("*").eq("project_id", project_id).execute()
+            return result.data or []
+        else:
+            conn = sqlite3.connect(SQLITE_DB)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT * FROM meetings WHERE project_id = ?", (project_id,))
+            rows = c.fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+
+# ============================================
+# CLOUDINARY
+# ============================================
+
+def upload_file(file_bytes: bytes, folder: str = "meetings") -> str:
+    if not cloudinary_available:
+        raise HTTPException(500, "Cloudinary no configurado. Revisa los Secrets.")
+    result = cloudinary.uploader.upload(file_bytes, folder=folder, resource_type="auto")
+    return result["secure_url"]
+
+# ============================================
+# CLAUDE (ANTHROPIC)
+# ============================================
+
+def build_meeting_context(meeting_data: dict) -> str:
+    parts = []
+    if meeting_data.get("transcript"):
+        parts.append(f"=== TRANSCRIPCIÓN ===\n{meeting_data['transcript']}")
+    if meeting_data.get("notes"):
+        notes = meeting_data["notes"]
+        if isinstance(notes, str):
+            notes = json.loads(notes)
+        notes_text = "\n".join([n["text"] for n in notes])
+        parts.append(f"=== NOTAS ===\n{notes_text}")
+    if meeting_data.get("images"):
+        images = meeting_data["images"]
+        if isinstance(images, str):
+            images = json.loads(images)
+        for i, img in enumerate(images):
+            parts.append(f"=== IMAGEN {i+1} ===\n{img.get('ocr_text', '')}")
+    if meeting_data.get("documents"):
+        docs = meeting_data["documents"]
+        if isinstance(docs, str):
+            docs = json.loads(docs)
+        for doc in docs:
+            parts.append(f"=== DOCUMENTO ===\n{doc.get('content', '')}")
+    return "\n\n".join(parts)
+
+def _prepare_messages(meeting_data: dict, question: Optional[str] = None):
+    context = build_meeting_context(meeting_data)
+    content_blocks = []
+    
+    # Añadir imágenes como bloques de visión si existen
+    if meeting_data.get("images"):
+        images = meeting_data["images"]
+        if isinstance(images, str):
+            images = json.loads(images)
+        for img in images:
+            if img.get("url"):
+                content_blocks.append({
+                    "type": "image",
+                    "source": {"type": "url", "url": img["url"]}
+                })
+    
+    # Contexto con cache_control
+    content_blocks.append({
+        "type": "text",
+        "text": f"CONTEXTO DE LA REUNIÓN:\n{context}",
+        "cache_control": {"type": "ephemeral"}
+    })
+    
+    messages = [{"role": "user", "content": content_blocks}]
+    
+    if question:
+        messages.append({"role": "user", "content": question})
+    
+    return messages
+
+def generate_summary(meeting_data: dict) -> str:
+    if not anthropic_available:
+        raise HTTPException(500, "Anthropic no configurado")
+    
+    system = """Eres un asistente ejecutivo experto. Resume la reunión en 3 párrafos:
+1. Contexto y temas tratados
+2. Decisiones clave tomadas
+3. Próximos pasos y tareas pendientes"""
+    
+    messages = _prepare_messages(meeting_data, include_images=True)
+    
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1500,
+        system=system,
+        messages=messages
+    )
+    return response.content[0].text
+
+def extract_action_items(meeting_data: dict) -> List[Dict]:
+    if not anthropic_available:
+        raise HTTPException(500, "Anthropic no configurado")
+    
+    system = """Eres un asistente de reuniones. Extrae las tareas pendientes (action items)
+y devuélvelas ÚNICAMENTE como un array JSON válido con esta estructura exacta:
+[
+  {"description": "...", "assignee": "...", "due_date": "YYYY-MM-DD o null"}
+]
+Si no sabes el responsable, usa "Por definir". Si no hay fecha, usa null.
+NO añadas texto explicativo, SOLO el JSON."""
+    
+    messages = _prepare_messages(meeting_data)
+    
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2000,
+        system=system,
+        messages=messages
+    )
+    
+    try:
+        text = response.content[0].text
+        text = text.replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
+    except:
+        return [{"description": "Error al parsear action items", "assignee": "Por definir", "due_date": None}]
+
+def answer_question(meeting_data: dict, question: str) -> str:
+    if not anthropic_available:
+        raise HTTPException(500, "Anthropic no configurado")
+    
+    system = """Eres un asistente de reuniones. Responde basándote ÚNICAMENTE en la información 
+proporcionada. Si no tienes la información, di claramente "No se mencionó en la reunión".
+Cita la fuente cuando sea posible."""
+    
+    messages = _prepare_messages(meeting_data, question=question)
+    
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2000,
+        system=system,
+        messages=messages
+    )
+    return response.content[0].text
+
+def analyze_image(image_url: str) -> str:
+    if not anthropic_available:
+        raise HTTPException(500, "Anthropic no configurado")
+    
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2000,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {"type": "url", "url": image_url}
+                },
+                {
+                    "type": "text",
+                    "text": "Describe detalladamente todo lo que ves en esta imagen. "
+                            "Si es una pizarra o presentación, transcribe TODO el texto visible "
+                            "y describe diagramas, flechas, colores y estructura visual."
+                }
+            ]
+        }]
+    )
+    return response.content[0].text
+
+# ============================================
+# FASTAPI APP
+# ============================================
+
+app = FastAPI(title="Meeting Assistant - Claude Edition", version="1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ─── Modelos Pydantic ───
+class CreateMeeting(BaseModel):
+    title: str
+    project_id: str = "default"
+
+class SetTranscript(BaseModel):
+    text: str
+
+class AddNote(BaseModel):
+    text: str
+
+class AskQuestion(BaseModel):
+    question: str
+
+# ─── Endpoints ───
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "services": {
+            "anthropic": anthropic_available,
+            "supabase": use_supabase,
+            "cloudinary": cloudinary_available,
+            "database": "supabase" if use_supabase else "sqlite"
+        }
+    }
+
+@app.post("/meetings/create")
+def create_meeting(data: CreateMeeting):
+    meeting_id = MeetingDB.create(data.title, data.project_id)
+    return {"meeting_id": meeting_id, "status": "created"}
+
+@app.get("/meetings/{meeting_id}")
+def get_meeting(meeting_id: str):
+    meeting = MeetingDB.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Reunión no encontrada")
+    # Parsear campos JSON para el frontend
+    for field in ["images", "notes", "documents", "action_items"]:
+        val = meeting.get(field, "[]")
+        if isinstance(val, str):
+            try:
+                meeting[field] = json.loads(val)
+            except:
+                meeting[field] = []
+    return meeting
+
+@app.post("/meetings/{meeting_id}/transcript")
+def set_transcript(meeting_id: str, data: SetTranscript):
+    MeetingDB.set_transcript(meeting_id, data.text)
+    return {"status": "ok"}
+
+@app.post("/meetings/{meeting_id}/note")
+def add_note(meeting_id: str, data: AddNote):
+    MeetingDB.add_note(meeting_id, data.text)
+    return {"status": "ok"}
+
+@app.post("/meetings/{meeting_id}/summary")
+def get_summary(meeting_id: str):
+    meeting = MeetingDB.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Reunión no encontrada")
+    summary = generate_summary(meeting)
+    MeetingDB.set_summary(meeting_id, summary)
+    return {"summary": summary}
+
+@app.post("/meetings/{meeting_id}/action-items")
+def get_action_items(meeting_id: str):
+    meeting = MeetingDB.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Reunión no encontrada")
+    items = extract_action_items(meeting)
+    MeetingDB.set_action_items(meeting_id, items)
+    return {"action_items": items}
+
+@app.post("/meetings/{meeting_id}/ask")
+def ask_claude(meeting_id: str, data: AskQuestion):
+    meeting = MeetingDB.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Reunión no encontrada")
+    answer = answer_question(meeting, data.question)
+    return {"answer": answer}
+
+@app.get("/meetings/project/{project_id}")
+def list_meetings(project_id: str):
+    return MeetingDB.list_by_project(project_id)
+
+@app.post("/upload/image/{meeting_id}")
+async def upload_image(meeting_id: str, file: UploadFile = File(...)):
+    meeting = MeetingDB.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Reunión no encontrada")
+    
+    contents = await file.read()
+    url = upload_file(contents, folder=f"meetings/{meeting_id}")
+    analysis = analyze_image(url)
+    MeetingDB.add_image(meeting_id, url, analysis)
+    
+    return {"url": url, "analysis": analysis}
+
+@app.post("/upload/document/{meeting_id}")
+async def upload_document(meeting_id: str, file: UploadFile = File(...)):
+    meeting = MeetingDB.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Reunión no encontrada")
+    
+    contents = await file.read()
+    url = upload_file(contents, folder=f"meetings/{meeting_id}/docs")
+    
+    docs = MeetingDB._get_json_field(meeting_id, "documents")
+    docs.append({
+        "url": url,
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "added_at": datetime.utcnow().isoformat()
+    })
+    MeetingDB.update(meeting_id, {"documents": docs})
+    
+    return {"url": url, "filename": file.filename}
+
+# ============================================
+# FRONTEND HTML
+# ============================================
+
+FRONTEND_HTML = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeting Assistant - Claude</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+       background: #0f172a; color: #e2e8f0; padding: 20px; max-width: 900px; margin: 0 auto; }
+h1 { color: #d97706; margin-bottom: 5px; }
+.subtitle { color: #94a3b8; margin-bottom: 25px; font-size: 14px; }
+.card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; 
+        border: 1px solid #334155; }
+h3 { color: #60a5fa; margin-bottom: 12px; font-size: 16px; }
+button { background: #d97706; color: white; border: none; padding: 10px 20px; 
+         border-radius: 8px; cursor: pointer; font-size: 14px; margin: 5px 5px 5px 0; }
+button:hover { background: #b45309; }
+button.secondary { background: #334155; }
+button.secondary:hover { background: #475569; }
+input, textarea { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; 
+                 background: #0f172a; color: white; margin: 8px 0; font-size: 15px; }
+textarea { resize: vertical; min-height: 80px; }
+#output { background: #0f172a; padding: 15px; border-radius: 8px; margin-top: 10px; 
+          white-space: pre-wrap; max-height: 400px; overflow-y: auto; border: 1px solid #334155; 
+          font-size: 14px; line-height: 1.6; }
+.hidden { display: none; }
+.tabs { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+.tab { padding: 8px 16px; background: #334155; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.tab.active { background: #d97706; }
+.section { display: none; }
+.section.active { display: block; }
+.preview-img { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #334155; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; 
+         background: #064e3b; color: #6ee7b7; margin-left: 10px; }
+.meeting-id { font-family: monospace; background: #334155; padding: 4px 10px; 
+              border-radius: 4px; font-size: 14px; }
+.status-ok { color: #6ee7b7; }
+.status-warn { color: #fbbf24; }
+.status-error { color: #f87171; }
+</style>
+</head>
+<body>
+<h1>🤖 Meeting Assistant</h1>
+<p class="subtitle">Powered by Claude Sonnet 5 • Visión nativa • Prompt caching</p>
+
+<div class="card">
+  <h3>📋 Nueva Reunión</h3>
+  <input type="text" id="meetingTitle" placeholder="Título de la reunión">
+  <input type="text" id="projectId" placeholder="ID del proyecto (opcional)" value="default">
+  <button onclick="createMeeting()">Crear Reunión</button>
+  <div id="meetingInfo" style="margin-top: 12px;"></div>
+</div>
+
+<div id="controls" class="card hidden">
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('transcript')">📝 Transcripción</div>
+    <div class="tab" onclick="showTab('image')">📷 Imagen</div>
+    <div class="tab" onclick="showTab('note')">✏️ Nota</div>
+    <div class="tab" onclick="showTab('ai')">🧠 Claude AI</div>
+  </div>
+
+  <div id="transcript-section" class="section active">
+    <p style="color: #94a3b8; font-size: 13px; margin-bottom: 8px;">
+      Pega aquí la transcripción de tu app de voz (Google Recorder, Otter, etc.)
+    </p>
+    <textarea id="transcriptText" rows="6" placeholder="Pega la transcripción completa aquí..."></textarea>
+    <button onclick="saveTranscript()">💾 Guardar Transcripción</button>
+  </div>
+
+  <div id="image-section" class="section">
+    <p style="color: #94a3b8; font-size: 13px; margin-bottom: 8px;">
+      Sube fotos de pizarras, presentaciones o cuadernos. Claude las analizará.
+    </p>
+    <input type="file" id="imageFile" accept="image/*" onchange="previewImage()">
+    <img id="imgPreview" class="preview-img hidden">
+    <button onclick="uploadImage()">📤 Subir y Analizar con Claude Vision</button>
+    <div id="imageResult"></div>
+  </div>
+
+  <div id="note-section" class="section">
+    <textarea id="noteText" rows="4" placeholder="Escribe una nota manual..."></textarea>
+    <button onclick="addNote()">💾 Guardar Nota</button>
+  </div>
+
+  <div id="ai-section" class="section">
+    <button class="secondary" onclick="generateSummary()">📄 Generar Resumen</button>
+    <button class="secondary" onclick="extractActionItems()">✅ Extraer Action Items</button>
+    <hr style="border-color: #334155; margin: 15px 0;">
+    <textarea id="question" rows="3" placeholder="Pregunta algo sobre la reunión..."></textarea>
+    <button onclick="askClaude()">🧠 Preguntar a Claude</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>📊 Resultado <span class="badge" id="statusBadge">Listo</span></h3>
+  <div id="output">Esperando acción...</div>
+</div>
+
+<script>
+let currentMeetingId = null;
+const API = '';
+
+function setStatus(text, type) {
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = text;
+  badge.style.cssText = type === 'loading' ? 'background:#713f12;color:#fbbf24;' :
+                        type === 'success' ? 'background:#064e3b;color:#6ee7b7;' :
+                        type === 'error' ? 'background:#450a0a;color:#f87171;' :
+                        'background:#064e3b;color:#6ee7b7;';
+}
+
+async function createMeeting() {
+  const title = document.getElementById('meetingTitle').value;
+  const project = document.getElementById('projectId').value || 'default';
+  if (!title) return alert('Escribe un título');
+
+  const res = await fetch(`${API}/meetings/create`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title, project_id: project})
+  });
+  const data = await res.json();
+  currentMeetingId = data.meeting_id;
+  document.getElementById('meetingInfo').innerHTML = 
+    `✅ Reunión creada: <span class="meeting-id">${currentMeetingId}</span>`;
+  document.getElementById('controls').classList.remove('hidden');
+  setStatus('Activa', 'success');
+}
+
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(`${tab}-section`).classList.add('active');
+}
+
+async function saveTranscript() {
+  const text = document.getElementById('transcriptText').value;
+  if (!text) return alert('Pega una transcripción');
+  if (!currentMeetingId) return alert('Crea una reunión primero');
+
+  setStatus('Guardando...', 'loading');
+  await fetch(`${API}/meetings/${currentMeetingId}/transcript`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text})
+  });
+  document.getElementById('transcriptText').value = '';
+  setStatus('Guardada', 'success');
+  document.getElementById('output').textContent = '✅ Transcripción guardada. Claude ya puede usarla.';
+}
+
+function previewImage() {
+  const file = document.getElementById('imageFile').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('imgPreview').src = e.target.result;
+    document.getElementById('imgPreview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadImage() {
+  const file = document.getElementById('imageFile').files[0];
+  if (!file) return alert('Selecciona una imagen');
+  if (!currentMeetingId) return alert('Crea una reunión primero');
+
+  const form = new FormData();
+  form.append('file', file);
+
+  setStatus('Claude analizando...', 'loading');
+  document.getElementById('output').textContent = '⏳ Claude está analizando la imagen con visión nativa...';
+
+  const res = await fetch(`${API}/upload/image/${currentMeetingId}`, {method: 'POST', body: form});
+  const data = await res.json();
+
+  setStatus('Analizada', 'success');
+  document.getElementById('output').textContent = 
+    `✅ Imagen subida: ${data.url}\\n\\n🧠 Análisis de Claude Vision:\\n${data.analysis}`;
+  document.getElementById('imageResult').innerHTML = '<p class="status-ok">✅ Imagen procesada</p>';
+}
+
+async function addNote() {
+  const text = document.getElementById('noteText').value;
+  if (!text) return;
+  if (!currentMeetingId) return alert('Crea una reunión primero');
+
+  setStatus('Guardando...', 'loading');
+  await fetch(`${API}/meetings/${currentMeetingId}/note`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text})
+  });
+  document.getElementById('noteText').value = '';
+  setStatus('Guardada', 'success');
+  document.getElementById('output').textContent = '✅ Nota guardada';
+}
+
+async function generateSummary() {
+  if (!currentMeetingId) return alert('Crea una reunión primero');
+  setStatus('Resumiendo...', 'loading');
+  document.getElementById('output').textContent = '⏳ Claude está generando el resumen ejecutivo...';
+
+  const res = await fetch(`${API}/meetings/${currentMeetingId}/summary`, {method: 'POST'});
+  const data = await res.json();
+
+  setStatus('Listo', 'success');
+  document.getElementById('output').textContent = `📄 RESUMEN EJECUTIVO:\\n\\n${data.summary}`;
+}
+
+async function extractActionItems() {
+  if (!currentMeetingId) return alert('Crea una reunión primero');
+  setStatus('Extrayendo...', 'loading');
+  document.getElementById('output').textContent = '⏳ Claude está extrayendo action items...';
+
+  const res = await fetch(`${API}/meetings/${currentMeetingId}/action-items`, {method: 'POST'});
+  const data = await res.json();
+
+  setStatus('Listo', 'success');
+  let text = '✅ ACTION ITEMS:\\n\\n';
+  data.action_items.forEach((item, i) => {
+    text += `${i+1}. ${item.description}\\n`;
+    text += `   👤 Responsable: ${item.assignee}\\n`;
+    text += `   📅 Fecha límite: ${item.due_date || 'No definida'}\\n\\n`;
+  });
+  document.getElementById('output').textContent = text;
+}
+
+async function askClaude() {
+  const q = document.getElementById('question').value;
+  if (!q) return;
+  if (!currentMeetingId) return alert('Crea una reunión primero');
+
+  setStatus('Pensando...', 'loading');
+  document.getElementById('output').textContent = '⏳ Claude está consultando la reunión (con prompt caching)...';
+
+  const res = await fetch(`${API}/meetings/${currentMeetingId}/ask`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({question: q})
+  });
+  const data = await res.json();
+
+  setStatus('Respuesta lista', 'success');
+  document.getElementById('output').textContent = `🧠 Claude:\\n\\n${data.answer}`;
+}
+</script>
+</body>
+</html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+def serve_frontend():
+    return FRONTEND_HTML
+
+# ============================================
+# RUN
+# ============================================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
