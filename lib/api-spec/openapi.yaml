@@ -156,6 +156,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project by ID
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Project deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
       operationId: updateProject
       tags: [projects]

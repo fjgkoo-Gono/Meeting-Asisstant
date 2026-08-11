@@ -67,6 +67,27 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
   res.json(GetProjectResponse.parse(project));
 });
 
+// DELETE /projects/:projectId
+router.delete("/projects/:projectId", async (req, res): Promise<void> => {
+  const params = GetProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [deleted] = await db
+    .delete(projectsTable)
+    .where(eq(projectsTable.id, params.data.projectId))
+    .returning();
+
+  if (!deleted) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.status(204).send();
+});
+
 // PATCH /projects/:projectId
 router.patch("/projects/:projectId", async (req, res): Promise<void> => {
   const params = UpdateProjectParams.safeParse(req.params);

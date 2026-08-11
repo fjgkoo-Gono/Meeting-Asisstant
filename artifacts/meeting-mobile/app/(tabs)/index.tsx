@@ -23,6 +23,7 @@ import {
   useListProjects,
   useCreateProject,
   useUpdateProject,
+  useDeleteProject,
   getListProjectsQueryKey,
   getGetProjectQueryKey,
 } from '@workspace/api-client-react';
@@ -75,6 +76,15 @@ export default function ProjectsScreen() {
     },
   });
 
+  const { mutate: deleteProject } = useDeleteProject({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
+    },
+  });
+
   function openEditForProject(project: Project) {
     setEditingProject(project);
     setEditName(project.name);
@@ -89,8 +99,28 @@ export default function ProjectsScreen() {
         text: 'Edit Project',
         onPress: () => openEditForProject(project),
       },
+      {
+        text: 'Delete Project',
+        style: 'destructive',
+        onPress: () => confirmDeleteProject(project),
+      },
       { text: 'Cancel', style: 'cancel' },
     ]);
+  }
+
+  function confirmDeleteProject(project: Project) {
+    Alert.alert(
+      'Delete Project?',
+      `"${project.name}" and all its meetings will be permanently deleted.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteProject({ projectId: project.id }),
+        },
+      ],
+    );
   }
 
   function handleSaveProject() {
