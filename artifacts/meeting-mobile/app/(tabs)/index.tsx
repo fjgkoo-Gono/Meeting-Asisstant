@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   KeyboardAvoidingView,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,10 +22,13 @@ import * as Haptics from 'expo-haptics';
 import {
   useListProjects,
   useCreateProject,
+  useUpdateProject,
   getListProjectsQueryKey,
+  getGetProjectQueryKey,
 } from '@workspace/api-client-react';
 import { ProjectCard } from '@/components/ProjectCard';
 import { useColors } from '@/hooks/useColors';
+import type { Project } from '@workspace/api-client-react';
 
 export default function ProjectsScreen() {
   const colors = useColors();
@@ -35,6 +40,12 @@ export default function ProjectsScreen() {
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+
+  // Edit project state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
 
   const { data: projects = [], isLoading, refetch, isRefetching } = useListProjects();
 
@@ -49,6 +60,46 @@ export default function ProjectsScreen() {
       },
     },
   });
+
+  const { mutate: updateProject, isPending: updatingProject } = useUpdateProject({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        if (editingProject) {
+          queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(editingProject.id) });
+        }
+        setShowEditModal(false);
+        setEditingProject(null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
+    },
+  });
+
+  function openEditForProject(project: Project) {
+    setEditingProject(project);
+    setEditName(project.name);
+    setEditDescription(project.description ?? '');
+    setShowEditModal(true);
+  }
+
+  function handleLongPressProject(project: Project) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(project.name, undefined, [
+      {
+        text: 'Edit Project',
+        onPress: () => openEditForProject(project),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  function handleSaveProject() {
+    if (!editName.trim() || updatingProject || !editingProject) return;
+    updateProject({
+      projectId: editingProject.id,
+      data: { name: editName.trim(), description: editDescription.trim() || null },
+    });
+  }
 
   const filtered = projects.filter(
     (p) =>
@@ -133,6 +184,7 @@ export default function ProjectsScreen() {
             <ProjectCard
               project={item}
               onPress={() => router.push(`/projects/${item.id}`)}
+              onLongPress={() => handleLongPressProject(item)}
             />
           )}
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 100 }]}
@@ -223,6 +275,90 @@ export default function ProjectsScreen() {
                 maxLength={500}
               />
             </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit Project modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.modal, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
+                <Feather name="x" size={22} color={colors.foreground} />
+              </Pressable>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
+              <Pressable
+                onPress={handleSaveProject}
+                disabled={!editName.trim() || updatingProject}
+                hitSlop={8}
+              >
+                {updatingProject ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.saveBtn,
+                      {
+                        color: editName.trim() ? colors.primary : colors.mutedForeground,
+                        fontWeight: editName.trim() ? ('600' as const) : ('400' as const),
+                      },
+                    ]}
+                  >
+                    Save
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    color: colors.foreground,
+                  },
+                ]}
+                placeholder="Project name"
+                placeholderTextColor={colors.mutedForeground}
+                value={editName}
+                onChangeText={setEditName}
+                autoFocus
+                maxLength={200}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                DESCRIPTION
+              </Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  styles.textArea,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    color: colors.foreground,
+                  },
+                ]}
+                placeholder="Optional description"
+                placeholderTextColor={colors.mutedForeground}
+                value={editDescription}
+                onChangeText={setEditDescription}
+                multiline
+                maxLength={2000}
+              />
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>

@@ -7,10 +7,11 @@ import type { Project } from '@workspace/api-client-react';
 interface Props {
   project: Project;
   onPress: () => void;
+  onLongPress?: () => void;
   meetingCount?: number;
 }
 
-export function ProjectCard({ project, onPress, meetingCount }: Props) {
+export function ProjectCard({ project, onPress, onLongPress, meetingCount }: Props) {
   const colors = useColors();
 
   const created = new Date(project.createdAt).toLocaleDateString('en-US', {
@@ -21,6 +22,8 @@ export function ProjectCard({ project, onPress, meetingCount }: Props) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       style={({ pressed }) => [
         styles.card,
         {
