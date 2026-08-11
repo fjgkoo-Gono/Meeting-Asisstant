@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/meeting-mobile/"
+title = "Meeting Assistant Mobile"
+description = "A React Native/Expo mobile companion for the Meeting Assistant. Lets users manage projects and meetings, review uploaded materials, and have streaming AI conversations about meeting content — all from their phone. Supports camera and gallery for uploading photo materials."
+version = "1.0.0"
+id = "artifacts/meeting-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/meeting-mobile/" ]
+localPort = 18909
+
+[services.development]
+run = "pnpm --filter @workspace/meeting-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/meeting-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/meeting-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "18909"
+BASE_PATH = "/meeting-mobile/"
