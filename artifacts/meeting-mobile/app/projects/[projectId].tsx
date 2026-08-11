@@ -88,6 +88,35 @@ export default function ProjectDetailScreen() {
     );
   }
 
+  function hasNewMeetingChanges(): boolean {
+    const defaultDate = new Date().toISOString().slice(0, 10);
+    return (
+      newTitle.trim() !== '' ||
+      newNotes.trim() !== '' ||
+      newDate !== defaultDate
+    );
+  }
+
+  function handleCloseMeetingModal() {
+    if (hasNewMeetingChanges()) {
+      Alert.alert('Discard changes?', undefined, [
+        { text: 'Keep Editing', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            setShowMeetingModal(false);
+            setNewTitle('');
+            setNewDate(new Date().toISOString().slice(0, 10));
+            setNewNotes('');
+          },
+        },
+      ]);
+    } else {
+      setShowMeetingModal(false);
+    }
+  }
+
   function handleCloseEditModal() {
     if (hasEditChanges()) {
       Alert.alert('Discard changes?', undefined, [
@@ -325,7 +354,7 @@ export default function ProjectDetailScreen() {
         visible={showMeetingModal}
         animationType="slide"
         presentationStyle="formSheet"
-        onRequestClose={() => setShowMeetingModal(false)}
+        onRequestClose={handleCloseMeetingModal}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -333,7 +362,7 @@ export default function ProjectDetailScreen() {
         >
           <View style={[styles.modal, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setShowMeetingModal(false)} hitSlop={8}>
+              <Pressable onPress={handleCloseMeetingModal} hitSlop={8}>
                 <Feather name="x" size={22} color={colors.foreground} />
               </Pressable>
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>New Meeting</Text>
