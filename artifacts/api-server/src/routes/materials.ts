@@ -111,6 +111,7 @@ router.post(
           filename: "",
           original_name: body.data.name ?? "Transcription",
           extracted_text: body.data.content,
+          context_note: body.data.contextNote ?? null,
           status: "ready",
         })
         .select()
@@ -135,6 +136,8 @@ router.post(
 
     const materialType = rawType as MaterialType;
 
+    const rawContextNote = req.body?.contextNote as string | undefined;
+
     const { data, error } = await supabase
       .from("materials")
       .insert({
@@ -143,6 +146,7 @@ router.post(
         filename: req.file.filename,
         original_name: req.file.originalname,
         extracted_text: null,
+        context_note: rawContextNote?.trim() || null,
         status: "processing",
       })
       .select()

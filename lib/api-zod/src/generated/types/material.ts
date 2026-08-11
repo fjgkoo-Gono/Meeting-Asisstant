@@ -16,6 +16,8 @@ export interface Material {
   originalName: string;
   /** @nullable */
   extractedText?: string | null;
+  /** @nullable */
+  contextNote?: string | null;
   status: MaterialStatus;
   createdAt: Date;
 }

@@ -201,6 +201,7 @@ export const ListMaterialsResponseItem = zod.object({
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
+  "contextNote": zod.string().nullish(),
   "status": zod.enum(['processing', 'ready', 'error']),
   "createdAt": zod.coerce.date()
 })
@@ -218,7 +219,8 @@ export const CreateMaterialParams = zod.object({
 export const CreateMaterialBody = zod.object({
   "type": zod.enum(['text']),
   "name": zod.string().optional(),
-  "content": zod.string()
+  "content": zod.string(),
+  "contextNote": zod.string().optional()
 })
 
 export const CreateMaterialResponse = zod.object({
@@ -228,6 +230,7 @@ export const CreateMaterialResponse = zod.object({
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
+  "contextNote": zod.string().nullish(),
   "status": zod.enum(['processing', 'ready', 'error']),
   "createdAt": zod.coerce.date()
 })

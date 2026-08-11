@@ -29,6 +29,10 @@ import {
   Plus,
   MessageSquare,
   Layers,
+  ExternalLink,
+  StickyNote,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -83,6 +87,71 @@ function StatusBadge({ status }: { status: Material['status'] }) {
   );
 }
 
+// ── Context note modal (shown after selecting a file) ─────────────────────
+
+function ContextNoteModal({
+  filename,
+  onCancel,
+  onConfirm,
+}: {
+  filename: string;
+  onCancel: () => void;
+  onConfirm: (note: string) => void;
+}) {
+  const [note, setNote] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onCancel}>
+      <div
+        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 flex flex-col gap-4 pb-safe"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Nota de contexto</h3>
+          <button onClick={onCancel} className="p-1 rounded-full hover:bg-muted transition-colors">
+            <X className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* File badge */}
+        <div className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-2">
+          <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm text-foreground/80 truncate">{filename}</span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Nota opcional para el asistente IA
+          </label>
+          <textarea
+            className="w-full h-28 rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder='Ej: "Presupuesto Q3 aprobado en la junta del martes" o "Foto de la pizarra con el diagrama de flujo"'
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 rounded-2xl"
+            onClick={() => onConfirm('')}
+          >
+            Omitir
+          </Button>
+          <Button
+            className="flex-1 rounded-2xl"
+            onClick={() => onConfirm(note.trim())}
+          >
+            Subir
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Text modal ────────────────────────────────────────────────────────────
 
 function TextMaterialModal({
@@ -90,10 +159,11 @@ function TextMaterialModal({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (name: string, content: string) => void;
+  onSave: (name: string, content: string, contextNote: string) => void;
 }) {
   const [name, setName] = useState('Transcripción');
   const [content, setContent] = useState('');
+  const [contextNote, setContextNote] = useState('');
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
@@ -114,16 +184,22 @@ function TextMaterialModal({
           onChange={e => setName(e.target.value)}
         />
         <textarea
-          className="w-full h-48 rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full h-40 rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="Pega o escribe el texto aquí…"
           value={content}
           onChange={e => setContent(e.target.value)}
+        />
+        <textarea
+          className="w-full h-16 rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+          placeholder="Nota de contexto para el asistente IA (opcional)"
+          value={contextNote}
+          onChange={e => setContextNote(e.target.value)}
         />
         <Button
           className="w-full rounded-2xl"
           disabled={!content.trim()}
           onClick={() => {
-            onSave(name || 'Transcripción', content);
+            onSave(name || 'Transcripción', content, contextNote);
             onClose();
           }}
         >
@@ -237,23 +313,78 @@ function MaterialCard({
   onRetry: (id: number) => void;
 }) {
   const Ic = TYPE_ICON[material.type] ?? Paperclip;
+  const [showText, setShowText] = useState(false);
+
+  const hasFile = material.type !== 'text' && material.filename;
+  const fileUrl = hasFile ? `/api/files/${material.filename}` : null;
+
+  const handleOpen = () => {
+    if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div className="flex items-center gap-3 bg-muted/30 border border-border rounded-2xl px-4 py-3">
-      <div className="h-9 w-9 rounded-xl bg-background flex items-center justify-center shadow-sm shrink-0">
-        <Ic className="h-4 w-4 text-muted-foreground" />
+    <div className="flex flex-col bg-muted/30 border border-border rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className="h-9 w-9 rounded-xl bg-background flex items-center justify-center shadow-sm shrink-0">
+          <Ic className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate text-foreground">{material.originalName}</p>
+          <StatusBadge status={material.status} />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* View / open */}
+          {hasFile && (
+            <button
+              onClick={handleOpen}
+              className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+              title="Abrir documento"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Expand text */}
+          {material.type === 'text' && material.extractedText && (
+            <button
+              onClick={() => setShowText(v => !v)}
+              className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+              title="Ver contenido"
+            >
+              {showText ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          )}
+
+          {/* Retry */}
+          {material.status === 'error' && (
+            <button
+              onClick={() => onRetry(material.id)}
+              className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+              title="Reintentar"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate text-foreground">{material.originalName}</p>
-        <StatusBadge status={material.status} />
-      </div>
-      {material.status === 'error' && (
-        <button
-          onClick={() => onRetry(material.id)}
-          className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
-          title="Reintentar"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </button>
+
+      {/* Context note */}
+      {material.contextNote && (
+        <div className="flex items-start gap-2 px-4 pb-3 -mt-1">
+          <StickyNote className="h-3 w-3 text-muted-foreground/60 mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground/80 leading-relaxed">{material.contextNote}</p>
+        </div>
+      )}
+
+      {/* Expanded text */}
+      {showText && material.extractedText && (
+        <div className="px-4 pb-4 border-t border-border/50 pt-3">
+          <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+            {material.extractedText}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -262,6 +393,10 @@ function MaterialCard({
 // ── Tab types ─────────────────────────────────────────────────────────────
 
 type Tab = 'materials' | 'chat';
+
+// ── Pending upload (waiting for context note confirmation) ─────────────────
+
+type PendingUpload = { type: FileMaterialType; file: File };
 
 // ── Main page ─────────────────────────────────────────────────────────────
 
@@ -296,18 +431,28 @@ export default function MeetingDetail() {
   const queryClient = useQueryClient();
   const [showSheet, setShowSheet] = useState(false);
   const [showTextModal, setShowTextModal] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const invalidateMaterials = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(projectId, meetingId) });
   }, [queryClient, projectId, meetingId]);
 
-  const handleFileSelect = useCallback(
-    async (type: FileMaterialType, file: File) => {
-      setShowSheet(false);
+  // Step 1: file selected → show context note modal (don't upload yet)
+  const handleFileSelect = useCallback((type: FileMaterialType, file: File) => {
+    setShowSheet(false);
+    setPendingUpload({ type, file });
+  }, []);
+
+  // Step 2: user confirmed context note → actually upload
+  const handleConfirmUpload = useCallback(
+    async (contextNote: string) => {
+      if (!pendingUpload) return;
+      const { type, file } = pendingUpload;
+      setPendingUpload(null);
       setUploading(true);
       try {
-        await uploadFileMaterial(projectId, meetingId, type, file);
+        await uploadFileMaterial(projectId, meetingId, type, file, contextNote || undefined);
         invalidateMaterials();
         toast.success('Material añadido');
       } catch {
@@ -316,15 +461,20 @@ export default function MeetingDetail() {
         setUploading(false);
       }
     },
-    [projectId, meetingId, invalidateMaterials],
+    [pendingUpload, projectId, meetingId, invalidateMaterials],
   );
 
   const handleTextSave = useCallback(
-    async (name: string, content: string) => {
+    async (name: string, content: string, contextNote: string) => {
       setShowTextModal(false);
       setUploading(true);
       try {
-        await createMaterial(projectId, meetingId, { type: 'text', name, content });
+        await createMaterial(projectId, meetingId, {
+          type: 'text',
+          name,
+          content,
+          contextNote: contextNote || undefined,
+        });
         invalidateMaterials();
         toast.success('Texto añadido');
       } catch {
@@ -503,6 +653,7 @@ export default function MeetingDetail() {
         </main>
       )}
 
+      {/* Overlays */}
       {showSheet && (
         <AddMaterialSheet
           onClose={() => setShowSheet(false)}
@@ -512,6 +663,14 @@ export default function MeetingDetail() {
             setShowTextModal(true);
           }}
           uploading={uploading}
+        />
+      )}
+
+      {pendingUpload && (
+        <ContextNoteModal
+          filename={pendingUpload.file.name}
+          onCancel={() => setPendingUpload(null)}
+          onConfirm={handleConfirmUpload}
         />
       )}
 

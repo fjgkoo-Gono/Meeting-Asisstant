@@ -69,6 +69,7 @@ async function buildMeetingContext(
   } else {
     for (const m of mats) {
       lines.push(`\n#### Material: ${m.original_name} (tipo: ${m.type})`);
+      if (m.context_note) lines.push(`Nota de contexto del usuario: ${m.context_note}`);
       if (m.status === "processing") lines.push("[Aún en procesamiento — texto no disponible]");
       else if (m.status === "error") lines.push("[Error al extraer el texto de este material]");
       else if (m.extracted_text) lines.push(m.extracted_text.slice(0, 8000));

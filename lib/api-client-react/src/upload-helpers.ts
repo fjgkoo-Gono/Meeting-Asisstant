@@ -16,10 +16,12 @@ export async function uploadFileMaterial(
   meetingId: number,
   type: "photo" | "image" | "pdf" | "excel",
   file: File,
+  contextNote?: string,
 ): Promise<Material> {
   const fd = new FormData();
   fd.append("type", type);
   fd.append("file", file);
+  if (contextNote?.trim()) fd.append("contextNote", contextNote.trim());
 
   return customFetch<Material>(
     `/api/projects/${projectId}/meetings/${meetingId}/materials`,

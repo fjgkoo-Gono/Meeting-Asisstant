@@ -11,4 +11,5 @@ export interface MaterialTextInput {
   type: MaterialTextInputType;
   name?: string;
   content: string;
+  contextNote?: string;
 }
