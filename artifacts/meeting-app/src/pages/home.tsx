@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 export default function Home() {
-  const { data: projects, isLoading } = useListProjects();
+  const { data: projects, isLoading } = useListProjects({ query: { refetchInterval: 30_000 } });
   const [search, setSearch] = useState('');
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
