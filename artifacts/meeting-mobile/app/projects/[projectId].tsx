@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,9 @@ import {
   useGetProject,
   useListMeetings,
   useCreateMeeting,
+  useUpdateProject,
   getListMeetingsQueryKey,
+  getGetProjectQueryKey,
 } from '@workspace/api-client-react';
 import { MeetingCard } from '@/components/MeetingCard';
 import { useColors } from '@/hooks/useColors';
@@ -41,11 +43,40 @@ export default function ProjectDetailScreen() {
   const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [newNotes, setNewNotes] = useState('');
 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+
   const navigation = useNavigation();
   const { data: project, isLoading: loadingProject } = useGetProject(pid);
   useEffect(() => {
     if (project?.name) navigation.setOptions({ title: project.name });
   }, [project?.name, navigation]);
+
+  const { mutate: updateProject, isPending: updatingProject } = useUpdateProject({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(pid) });
+        setShowEditModal(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
+    },
+  });
+
+  function openEditModal() {
+    if (!project) return;
+    setEditName(project.name);
+    setEditDescription(project.description ?? '');
+    setShowEditModal(true);
+  }
+
+  function handleSaveProject() {
+    if (!editName.trim() || updatingProject) return;
+    updateProject({
+      projectId: pid,
+      data: { name: editName.trim(), description: editDescription.trim() || null },
+    });
+  }
   const {
     data: meetings = [],
     isLoading: loadingMeetings,
@@ -85,11 +116,18 @@ export default function ProjectDetailScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Project info banner */}
       <View style={[styles.banner, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        {project?.description ? (
-          <Text style={[styles.description, { color: colors.mutedForeground }]} numberOfLines={3}>
-            {project.description}
-          </Text>
-        ) : null}
+        <View style={styles.bannerTopRow}>
+          {project?.description ? (
+            <Text style={[styles.description, { color: colors.mutedForeground, flex: 1 }]} numberOfLines={3}>
+              {project.description}
+            </Text>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          <Pressable onPress={openEditModal} hitSlop={8} style={styles.editBtn}>
+            <Feather name="edit-2" size={15} color={colors.mutedForeground} />
+          </Pressable>
+        </View>
         <Pressable
           onPress={() =>
             router.push({
@@ -166,6 +204,71 @@ export default function ProjectDetailScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Edit Project modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.modal, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
+                <Feather name="x" size={22} color={colors.foreground} />
+              </Pressable>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
+              <Pressable onPress={handleSaveProject} disabled={!editName.trim() || updatingProject} hitSlop={8}>
+                {updatingProject ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.saveBtn,
+                      { color: editName.trim() ? colors.primary : colors.mutedForeground },
+                    ]}
+                  >
+                    Save
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder="Project name"
+                placeholderTextColor={colors.mutedForeground}
+                value={editName}
+                onChangeText={setEditName}
+                autoFocus
+                maxLength={200}
+              />
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DESCRIPTION</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  styles.textArea,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder="Project description (optional)"
+                placeholderTextColor={colors.mutedForeground}
+                value={editDescription}
+                onChangeText={setEditDescription}
+                multiline
+                maxLength={2000}
+              />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* New Meeting modal */}
       <Modal
@@ -265,6 +368,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 10,
+  },
+  bannerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  editBtn: {
+    padding: 4,
+    marginTop: 2,
   },
   description: {
     fontSize: 14,

@@ -9,6 +9,9 @@ import {
   GetMeetingResponse,
   CreateMeetingResponse,
   ListMeetingsResponse,
+  UpdateMeetingBody,
+  UpdateMeetingParams,
+  UpdateMeetingResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -111,6 +114,54 @@ router.get("/projects/:projectId/meetings/:meetingId", async (req, res): Promise
   }
 
   res.json(GetMeetingResponse.parse(meeting));
+});
+
+// PATCH /projects/:projectId/meetings/:meetingId
+router.patch("/projects/:projectId/meetings/:meetingId", async (req, res): Promise<void> => {
+  const params = UpdateMeetingParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = UpdateMeetingBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  // Build update object with only provided fields
+  const updates: Record<string, unknown> = {};
+  if (body.data.title !== undefined) updates.title = body.data.title;
+  if (body.data.date !== undefined) {
+    const rawDate = body.data.date;
+    updates.date =
+      rawDate instanceof Date ? rawDate.toISOString().slice(0, 10) : String(rawDate);
+  }
+  if ("notes" in body.data) updates.notes = body.data.notes ?? null;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(meetingsTable)
+    .set(updates)
+    .where(
+      and(
+        eq(meetingsTable.id, params.data.meetingId),
+        eq(meetingsTable.projectId, params.data.projectId),
+      ),
+    )
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Meeting not found" });
+    return;
+  }
+
+  res.json(UpdateMeetingResponse.parse(updated));
 });
 
 export default router;

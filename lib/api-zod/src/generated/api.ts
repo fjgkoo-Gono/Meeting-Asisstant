@@ -49,21 +49,6 @@ export const CreateProjectResponse = zod.object({
 
 
 /**
- * @summary Get a project by ID
- */
-export const GetProjectParams = zod.object({
-  "projectId": zod.coerce.number()
-})
-
-export const GetProjectResponse = zod.object({
-  "id": zod.number(),
-  "name": zod.string(),
-  "description": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
-})
-
-
-/**
  * @summary List meetings in a project
  */
 export const ListMeetingsParams = zod.object({
@@ -108,6 +93,44 @@ export const CreateMeetingResponse = zod.object({
 
 
 /**
+ * @summary Get a project by ID
+ */
+export const GetProjectParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const GetProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a project's name or description
+ */
+export const UpdateProjectParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+
+
+
+export const UpdateProjectBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "description": zod.string().nullish()
+})
+
+export const UpdateProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Get a meeting by ID
  */
 export const GetMeetingParams = zod.object({
@@ -116,6 +139,33 @@ export const GetMeetingParams = zod.object({
 })
 
 export const GetMeetingResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "title": zod.string(),
+  "date": zod.coerce.date(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a meeting's title, date, or notes
+ */
+export const UpdateMeetingParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+
+
+
+export const UpdateMeetingBody = zod.object({
+  "title": zod.string().min(1).optional(),
+  "date": zod.coerce.date().optional(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateMeetingResponse = zod.object({
   "id": zod.number(),
   "projectId": zod.number(),
   "title": zod.string(),

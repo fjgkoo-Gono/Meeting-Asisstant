@@ -11,6 +11,9 @@ import {
   GetProjectSummaryParams,
   GetProjectSummaryResponse,
   GetStatsResponse,
+  UpdateProjectBody,
+  UpdateProjectParams,
+  UpdateProjectResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -62,6 +65,43 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
   }
 
   res.json(GetProjectResponse.parse(project));
+});
+
+// PATCH /projects/:projectId
+router.patch("/projects/:projectId", async (req, res): Promise<void> => {
+  const params = UpdateProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = UpdateProjectBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (body.data.name !== undefined) updates.name = body.data.name;
+  if ("description" in body.data) updates.description = body.data.description ?? null;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(projectsTable)
+    .set(updates)
+    .where(eq(projectsTable.id, params.data.projectId))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.json(UpdateProjectResponse.parse(updated));
 });
 
 // GET /projects/:projectId/summary

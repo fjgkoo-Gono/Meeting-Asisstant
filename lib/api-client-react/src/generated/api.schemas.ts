@@ -44,6 +44,21 @@ export interface MeetingInput {
   notes?: string;
 }
 
+export interface MeetingUpdateInput {
+  /** @minLength 1 */
+  title?: string;
+  date?: string;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface ProjectUpdateInput {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+}
+
 export interface ProjectSummary {
   id: number;
   name: string;

@@ -28,7 +28,9 @@ import {
   useListMaterials,
   useCreateMaterial,
   useRetryMaterial,
+  useUpdateMeeting,
   getListMaterialsQueryKey,
+  getGetMeetingQueryKey,
 } from '@workspace/api-client-react';
 import { MaterialCard } from '@/components/MaterialCard';
 import { ChatMessage } from '@/components/ChatMessage';
@@ -59,6 +61,12 @@ export default function MeetingDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<Tab>('materials');
 
+  // --- Edit meeting ---
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+
   // --- Materials ---
   const navigation = useNavigation();
   const {
@@ -69,6 +77,33 @@ export default function MeetingDetailScreen() {
     if (meeting?.title) navigation.setOptions({ title: meeting.title });
   }, [meeting?.title, navigation]);
 
+  const { mutate: updateMeeting, isPending: updatingMeeting } = useUpdateMeeting({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetMeetingQueryKey(pid, mid) });
+        setShowEditModal(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      },
+    },
+  });
+
+  function openEditModal() {
+    if (!meeting) return;
+    setEditTitle(meeting.title);
+    setEditDate(meeting.date);
+    setEditNotes(meeting.notes ?? '');
+    setShowEditModal(true);
+  }
+
+  function handleSaveMeeting() {
+    if (!editTitle.trim() || updatingMeeting) return;
+    updateMeeting({
+      projectId: pid,
+      meetingId: mid,
+      data: { title: editTitle.trim(), date: editDate, notes: editNotes.trim() || null },
+    });
+  }
+
   const {
     data: materials = [],
     isLoading: loadingMaterials,
@@ -76,6 +111,7 @@ export default function MeetingDetailScreen() {
     isRefetching: isRefetchingMaterials,
   } = useListMaterials(pid, mid, {
     query: {
+      queryKey: getListMaterialsQueryKey(pid, mid),
       refetchInterval: (query) => {
         const data = query.state.data;
         if (!data) return false;
@@ -275,19 +311,24 @@ export default function MeetingDetailScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Meeting meta */}
       <View style={[styles.meetingMeta, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        {meeting?.date ? (
-          <View style={styles.metaRow}>
-            <Feather name="calendar" size={13} color={colors.mutedForeground} />
-            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-              {new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.metaTopRow}>
+          {meeting?.date ? (
+            <View style={styles.metaRow}>
+              <Feather name="calendar" size={13} color={colors.mutedForeground} />
+              <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                {new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </Text>
+            </View>
+          ) : null}
+          <Pressable onPress={openEditModal} hitSlop={8} style={styles.editBtn}>
+            <Feather name="edit-2" size={15} color={colors.mutedForeground} />
+          </Pressable>
+        </View>
         {meeting?.notes ? (
           <Text style={[styles.notesText, { color: colors.mutedForeground }]} numberOfLines={3}>
             {meeting.notes}
@@ -438,6 +479,88 @@ export default function MeetingDetailScreen() {
         </KeyboardAvoidingView>
       )}
 
+      {/* Edit Meeting modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <RNKeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.modal, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
+                <Feather name="x" size={22} color={colors.foreground} />
+              </Pressable>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Meeting</Text>
+              <Pressable
+                onPress={handleSaveMeeting}
+                disabled={!editTitle.trim() || updatingMeeting}
+                hitSlop={8}
+              >
+                {updatingMeeting ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.saveBtn,
+                      { color: editTitle.trim() ? colors.primary : colors.mutedForeground },
+                    ]}
+                  >
+                    Save
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder="Meeting title"
+                placeholderTextColor={colors.mutedForeground}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                autoFocus
+                maxLength={200}
+              />
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DATE</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.mutedForeground}
+                value={editDate}
+                onChangeText={setEditDate}
+                maxLength={10}
+                keyboardType="numbers-and-punctuation"
+              />
+              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTES</Text>
+              <TextInput
+                style={[
+                  styles.formInput,
+                  styles.textArea,
+                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+                ]}
+                placeholder="Meeting notes (optional)"
+                placeholderTextColor={colors.mutedForeground}
+                value={editNotes}
+                onChangeText={setEditNotes}
+                multiline
+                maxLength={2000}
+              />
+            </ScrollView>
+          </View>
+        </RNKeyboardAvoidingView>
+      </Modal>
+
       {/* Text material modal */}
       <Modal
         visible={showTextModal}
@@ -532,10 +655,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 6,
   },
+  metaTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+  },
+  editBtn: {
+    padding: 4,
   },
   metaText: {
     fontSize: 13,
