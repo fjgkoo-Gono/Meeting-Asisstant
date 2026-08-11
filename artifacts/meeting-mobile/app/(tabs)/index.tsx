@@ -111,7 +111,7 @@ export default function ProjectsScreen() {
   function confirmDeleteProject(project: Project) {
     Alert.alert(
       'Delete Project?',
-      `"${project.name}" and all its meetings will be permanently deleted.`,
+      `"${project.name}" and all its meetings and uploaded files will be permanently deleted.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
