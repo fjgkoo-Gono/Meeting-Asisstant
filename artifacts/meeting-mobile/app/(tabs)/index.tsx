@@ -10,10 +10,9 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
-  KeyboardAvoidingView,
   Alert,
-  ScrollView,
 } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -263,77 +262,72 @@ export default function ProjectsScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setShowModal(false)}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setShowModal(false)} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>New Project</Text>
-              <Pressable onPress={handleCreate} disabled={!newName.trim() || creating} hitSlop={8}>
-                {creating ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveBtn,
-                      {
-                        color: newName.trim() ? colors.primary : colors.mutedForeground,
-                        fontWeight: newName.trim() ? ('600' as const) : ('400' as const),
-                      },
-                    ]}
-                  >
-                    Save
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-
-            <View style={styles.modalBody}>
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.foreground,
-                  },
-                ]}
-                placeholder="Project name"
-                placeholderTextColor={colors.mutedForeground}
-                value={newName}
-                onChangeText={setNewName}
-                autoFocus
-                maxLength={120}
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
-                DESCRIPTION
-              </Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.textArea,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.foreground,
-                  },
-                ]}
-                placeholder="Optional description"
-                placeholderTextColor={colors.mutedForeground}
-                value={newDesc}
-                onChangeText={setNewDesc}
-                multiline
-                maxLength={500}
-              />
-            </View>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={() => setShowModal(false)} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>New Project</Text>
+            <Pressable onPress={handleCreate} disabled={!newName.trim() || creating} hitSlop={8}>
+              {creating ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveBtn,
+                    {
+                      color: newName.trim() ? colors.primary : colors.mutedForeground,
+                      fontWeight: newName.trim() ? ('600' as const) : ('400' as const),
+                    },
+                  ]}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
+
+          <KeyboardAwareScrollViewCompat contentContainerStyle={styles.modalBody}>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+              placeholder="Project name"
+              placeholderTextColor={colors.mutedForeground}
+              value={newName}
+              onChangeText={setNewName}
+              autoFocus
+              maxLength={120}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+              DESCRIPTION
+            </Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.textArea,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+              placeholder="Optional description"
+              placeholderTextColor={colors.mutedForeground}
+              value={newDesc}
+              onChangeText={setNewDesc}
+              multiline
+              maxLength={500}
+            />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
 
       {/* Edit Project modal */}
@@ -343,81 +337,76 @@ export default function ProjectsScreen() {
         presentationStyle="formSheet"
         onRequestClose={handleCloseEditModal}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={handleCloseEditModal} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
-              <Pressable
-                onPress={handleSaveProject}
-                disabled={!editName.trim() || updatingProject}
-                hitSlop={8}
-              >
-                {updatingProject ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveBtn,
-                      {
-                        color: editName.trim() ? colors.primary : colors.mutedForeground,
-                        fontWeight: editName.trim() ? ('600' as const) : ('400' as const),
-                      },
-                    ]}
-                  >
-                    Save
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.foreground,
-                  },
-                ]}
-                placeholder="Project name"
-                placeholderTextColor={colors.mutedForeground}
-                value={editName}
-                onChangeText={setEditName}
-                autoFocus
-                maxLength={200}
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
-                DESCRIPTION
-              </Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.textArea,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.foreground,
-                  },
-                ]}
-                placeholder="Optional description"
-                placeholderTextColor={colors.mutedForeground}
-                value={editDescription}
-                onChangeText={setEditDescription}
-                multiline
-                maxLength={2000}
-              />
-            </ScrollView>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={handleCloseEditModal} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
+            <Pressable
+              onPress={handleSaveProject}
+              disabled={!editName.trim() || updatingProject}
+              hitSlop={8}
+            >
+              {updatingProject ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveBtn,
+                    {
+                      color: editName.trim() ? colors.primary : colors.mutedForeground,
+                      fontWeight: editName.trim() ? ('600' as const) : ('400' as const),
+                    },
+                  ]}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
+
+          <KeyboardAwareScrollViewCompat contentContainerStyle={styles.modalBody}>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+              placeholder="Project name"
+              placeholderTextColor={colors.mutedForeground}
+              value={editName}
+              onChangeText={setEditName}
+              autoFocus
+              maxLength={200}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+              DESCRIPTION
+            </Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.textArea,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+              placeholder="Optional description"
+              placeholderTextColor={colors.mutedForeground}
+              value={editDescription}
+              onChangeText={setEditDescription}
+              multiline
+              maxLength={2000}
+            />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
     </View>
   );
