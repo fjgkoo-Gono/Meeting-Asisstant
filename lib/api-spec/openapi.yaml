@@ -14,6 +14,8 @@ tags:
     description: Project operations
   - name: meetings
     description: Meeting operations
+  - name: materials
+    description: Meeting material operations
 
 paths:
   /healthz:
@@ -185,6 +187,116 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/meetings/{meetingId}/materials:
+    get:
+      operationId: listMaterials
+      tags: [materials]
+      summary: List materials for a meeting
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Material"
+        "404":
+          description: Project or meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createMaterial
+      tags: [materials]
+      summary: Upload a file or text material to a meeting
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/MaterialFileInput"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialTextInput"
+      responses:
+        "201":
+          description: Created material (may still be processing)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project or meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/meetings/{meetingId}/materials/{materialId}/retry:
+    post:
+      operationId: retryMaterial
+      tags: [materials]
+      summary: Retry text extraction for a failed material
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Material reset to processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/summary:
     get:
       operationId: getProjectSummary
@@ -343,3 +455,55 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentMeeting"
+
+    MaterialType:
+      type: string
+      enum: [photo, image, pdf, excel, text]
+
+    MaterialStatus:
+      type: string
+      enum: [processing, ready, error]
+
+    Material:
+      type: object
+      required: [id, meetingId, type, filename, originalName, status, createdAt]
+      properties:
+        id:
+          type: number
+        meetingId:
+          type: number
+        type:
+          $ref: "#/components/schemas/MaterialType"
+        filename:
+          type: string
+        originalName:
+          type: string
+        extractedText:
+          type: ["string", "null"]
+        status:
+          $ref: "#/components/schemas/MaterialStatus"
+        createdAt:
+          type: string
+          format: date-time
+
+    MaterialFileInput:
+      type: object
+      required: [type, file]
+      properties:
+        type:
+          $ref: "#/components/schemas/MaterialType"
+        file:
+          type: string
+          format: binary
+
+    MaterialTextInput:
+      type: object
+      required: [type, content]
+      properties:
+        type:
+          type: string
+          enum: [text]
+        name:
+          type: string
+        content:
+          type: string

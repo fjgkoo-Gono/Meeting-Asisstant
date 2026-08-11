@@ -22,6 +22,9 @@ import type {
 import type {
   ErrorResponse,
   HealthStatus,
+  Material,
+  MaterialFileInput,
+  MaterialTextInput,
   Meeting,
   MeetingInput,
   Project,
@@ -590,6 +593,237 @@ export function useGetMeeting<TData = Awaited<ReturnType<typeof getMeeting>>, TE
 
 
 
+
+export const getListMaterialsUrl = (projectId: number,
+    meetingId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/meetings/${meetingId}/materials`
+}
+
+/**
+ * @summary List materials for a meeting
+ */
+export const listMaterials = async (projectId: number,
+    meetingId: number, options?: Parameters<typeof customFetch>[1]): Promise<Material[]> => {
+
+  return customFetch<Material[]>(getListMaterialsUrl(projectId,meetingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMaterialsQueryKey = (projectId: number,
+    meetingId: number,) => {
+    return [
+    `/api/projects/${projectId}/meetings/${meetingId}/materials`
+    ] as const;
+    }
+
+
+export const getListMaterialsQueryOptions = <TData = Awaited<ReturnType<typeof listMaterials>>, TError = ErrorType<ErrorResponse>>(projectId: number,
+    meetingId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMaterials>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMaterialsQueryKey(projectId,meetingId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMaterials>>> = ({ signal }) => listMaterials(projectId,meetingId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined && meetingId !== null && meetingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMaterials>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMaterialsQueryResult = NonNullable<Awaited<ReturnType<typeof listMaterials>>>
+export type ListMaterialsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List materials for a meeting
+ */
+
+export function useListMaterials<TData = Awaited<ReturnType<typeof listMaterials>>, TError = ErrorType<ErrorResponse>>(
+ projectId: number,
+    meetingId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMaterials>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMaterialsQueryOptions(projectId,meetingId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateMaterialUrl = (projectId: number,
+    meetingId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/meetings/${meetingId}/materials`
+}
+
+/**
+ * @summary Upload a file or text material to a meeting
+ */
+export const createMaterial = async (projectId: number,
+    meetingId: number,
+    createMaterialBody: MaterialFileInput | MaterialTextInput, options?: Parameters<typeof customFetch>[1]): Promise<Material> => {
+
+  return customFetch<Material>(getCreateMaterialUrl(projectId,meetingId),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: JSON.stringify(createMaterialBody)
+  }
+);}
+
+
+
+
+
+export const getCreateMaterialMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMaterial>>, TError,{projectId: number;meetingId: number;data: BodyType<MaterialFileInput | MaterialTextInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMaterial>>, TError,{projectId: number;meetingId: number;data: BodyType<MaterialFileInput | MaterialTextInput>}, TContext> => {
+
+const mutationKey = ['createMaterial'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMaterial>>, {projectId: number;meetingId: number;data: BodyType<MaterialFileInput | MaterialTextInput>}> = (props) => {
+          const {projectId,meetingId,data} = props ?? {};
+
+          return  createMaterial(projectId,meetingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMaterialMutationResult = NonNullable<Awaited<ReturnType<typeof createMaterial>>>
+    export type CreateMaterialMutationBody = BodyType<MaterialFileInput | MaterialTextInput>
+    export type CreateMaterialMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Upload a file or text material to a meeting
+ */
+export const useCreateMaterial = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMaterial>>, TError,{projectId: number;meetingId: number;data: BodyType<MaterialFileInput | MaterialTextInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMaterial>>,
+        TError,
+        {projectId: number;meetingId: number;data: BodyType<MaterialFileInput | MaterialTextInput>},
+        TContext
+      > => {
+      return useMutation(getCreateMaterialMutationOptions(options));
+    }
+
+export const getRetryMaterialUrl = (projectId: number,
+    meetingId: number,
+    materialId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/meetings/${meetingId}/materials/${materialId}/retry`
+}
+
+/**
+ * @summary Retry text extraction for a failed material
+ */
+export const retryMaterial = async (projectId: number,
+    meetingId: number,
+    materialId: number, options?: Parameters<typeof customFetch>[1]): Promise<Material> => {
+
+  return customFetch<Material>(getRetryMaterialUrl(projectId,meetingId,materialId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryMaterialMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryMaterial>>, TError,{projectId: number;meetingId: number;materialId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryMaterial>>, TError,{projectId: number;meetingId: number;materialId: number}, TContext> => {
+
+const mutationKey = ['retryMaterial'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryMaterial>>, {projectId: number;meetingId: number;materialId: number}> = (props) => {
+          const {projectId,meetingId,materialId} = props ?? {};
+
+          return  retryMaterial(projectId,meetingId,materialId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryMaterialMutationResult = NonNullable<Awaited<ReturnType<typeof retryMaterial>>>
+
+    export type RetryMaterialMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Retry text extraction for a failed material
+ */
+export const useRetryMaterial = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryMaterial>>, TError,{projectId: number;meetingId: number;materialId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryMaterial>>,
+        TError,
+        {projectId: number;meetingId: number;materialId: number},
+        TContext
+      > => {
+      return useMutation(getRetryMaterialMutationOptions(options));
+    }
 
 export const getGetProjectSummaryUrl = (projectId: number,) => {
 

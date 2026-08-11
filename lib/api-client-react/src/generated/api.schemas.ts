@@ -69,3 +69,53 @@ export interface Stats {
   recentMeetings: RecentMeeting[];
 }
 
+export type MaterialType = typeof MaterialType[keyof typeof MaterialType];
+
+
+export const MaterialType = {
+  photo: 'photo',
+  image: 'image',
+  pdf: 'pdf',
+  excel: 'excel',
+  text: 'text',
+} as const;
+
+export type MaterialStatus = typeof MaterialStatus[keyof typeof MaterialStatus];
+
+
+export const MaterialStatus = {
+  processing: 'processing',
+  ready: 'ready',
+  error: 'error',
+} as const;
+
+export interface Material {
+  id: number;
+  meetingId: number;
+  type: MaterialType;
+  filename: string;
+  originalName: string;
+  /** @nullable */
+  extractedText?: string | null;
+  status: MaterialStatus;
+  createdAt: string;
+}
+
+export interface MaterialFileInput {
+  type: MaterialType;
+  file: Blob;
+}
+
+export type MaterialTextInputType = typeof MaterialTextInputType[keyof typeof MaterialTextInputType];
+
+
+export const MaterialTextInputType = {
+  text: 'text',
+} as const;
+
+export interface MaterialTextInput {
+  type: MaterialTextInputType;
+  name?: string;
+  content: string;
+}
+

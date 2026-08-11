@@ -8,6 +8,12 @@
 
 export * from './errorResponse';
 export * from './healthStatus';
+export * from './material';
+export * from './materialFileInput';
+export * from './materialStatus';
+export * from './materialTextInput';
+export * from './materialTextInputType';
+export * from './materialType';
 export * from './meeting';
 export * from './meetingInput';
 export * from './project';

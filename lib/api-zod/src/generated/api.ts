@@ -126,6 +126,74 @@ export const GetMeetingResponse = zod.object({
 
 
 /**
+ * @summary List materials for a meeting
+ */
+export const ListMaterialsParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+export const ListMaterialsResponseItem = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text']),
+  "filename": zod.string(),
+  "originalName": zod.string(),
+  "extractedText": zod.string().nullish(),
+  "status": zod.enum(['processing', 'ready', 'error']),
+  "createdAt": zod.coerce.date()
+})
+export const ListMaterialsResponse = zod.array(ListMaterialsResponseItem)
+
+
+/**
+ * @summary Upload a file or text material to a meeting
+ */
+export const CreateMaterialParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+export const CreateMaterialBody = zod.object({
+  "type": zod.enum(['text']),
+  "name": zod.string().optional(),
+  "content": zod.string()
+})
+
+export const CreateMaterialResponse = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text']),
+  "filename": zod.string(),
+  "originalName": zod.string(),
+  "extractedText": zod.string().nullish(),
+  "status": zod.enum(['processing', 'ready', 'error']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Retry text extraction for a failed material
+ */
+export const RetryMaterialParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number(),
+  "materialId": zod.coerce.number()
+})
+
+export const RetryMaterialResponse = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text']),
+  "filename": zod.string(),
+  "originalName": zod.string(),
+  "extractedText": zod.string().nullish(),
+  "status": zod.enum(['processing', 'ready', 'error']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Get a project summary with meeting count and latest meeting date
  */
 export const GetProjectSummaryParams = zod.object({
