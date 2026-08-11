@@ -1,27 +1,75 @@
 import { useGetProject, useListMeetings, useCreateMeeting, getGetProjectQueryKey, getListMeetingsQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useRoute } from 'wouter';
-import { ChevronLeft, Plus, Calendar, FileText, ChevronRight } from 'lucide-react';
+import { ChevronLeft, Plus, Calendar, FileText, ChevronRight, MessageSquare, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { ChatPanel } from '@/components/chat/ChatPanel';
+
+// ── Project Chat Sheet ─────────────────────────────────────────────────────
+
+function ProjectChatSheet({
+  projectId,
+  projectName,
+  onClose,
+}: {
+  projectId: number;
+  projectName: string;
+  onClose: () => void;
+}) {
+  const chatEndpoint = `/api/projects/${projectId}/chat`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+      {/* Sheet header */}
+      <div className="shrink-0 flex items-center h-14 px-4 border-b border-border/50 bg-background/80 backdrop-blur-md">
+        <button
+          onClick={onClose}
+          className="p-2 rounded-full hover:bg-muted transition-colors -ml-2"
+        >
+          <X className="h-5 w-5 text-muted-foreground" />
+        </button>
+        <div className="flex-1 flex flex-col items-center justify-center px-2">
+          <span className="text-sm font-semibold text-foreground truncate max-w-[200px]">
+            {projectName}
+          </span>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
+            Asistente IA del Proyecto
+          </span>
+        </div>
+        <div className="w-9" />
+      </div>
+
+      {/* Chat panel fills the remaining height */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <ChatPanel
+          chatEndpoint={chatEndpoint}
+          placeholder='Pregúntame sobre cualquier reunión de este proyecto. Por ejemplo: "¿Qué acordamos sobre el presupuesto en las últimas reuniones?" o "¿Hubo cambios respecto al plan inicial?"'
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────
 
 export default function ProjectDetail() {
   const [, params] = useRoute('/projects/:id');
   const projectId = Number(params?.id);
-  
+  const [showProjectChat, setShowProjectChat] = useState(false);
+
   const { data: project, isLoading: projectLoading } = useGetProject(projectId, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId) }
   });
-  
+
   const { data: meetings, isLoading: meetingsLoading } = useListMeetings(projectId, {
     query: { enabled: !!projectId, queryKey: getListMeetingsQueryKey(projectId) }
   });
@@ -44,10 +92,10 @@ export default function ProjectDetail() {
           </div>
           <div className="w-10 flex justify-end">
             {project && (
-              <NewMeetingDialog 
-                projectId={projectId} 
-                open={isNewMeetingOpen} 
-                onOpenChange={setIsNewMeetingOpen} 
+              <NewMeetingDialog
+                projectId={projectId}
+                open={isNewMeetingOpen}
+                onOpenChange={setIsNewMeetingOpen}
               />
             )}
           </div>
@@ -71,9 +119,9 @@ export default function ProjectDetail() {
           <div className="text-sm text-muted-foreground">{meetings?.length ?? 0} total</div>
         </div>
 
-        <div className="flex-col flex gap-3 pb-8">
+        <div className="flex-col flex gap-3 pb-28">
           {meetingsLoading ? (
-             [1, 2, 3].map(i => (
+            [1, 2, 3].map(i => (
               <div key={i} className="h-24 bg-muted/50 animate-pulse rounded-2xl" />
             ))
           ) : !meetings?.length ? (
@@ -81,8 +129,8 @@ export default function ProjectDetail() {
               <Calendar className="h-10 w-10 mb-3 mx-auto opacity-20" />
               <p className="font-medium text-foreground mb-1">No meetings yet</p>
               <p className="text-sm">Record your first meeting for this project.</p>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="mt-4 rounded-xl"
                 onClick={() => setIsNewMeetingOpen(true)}
               >
@@ -117,6 +165,26 @@ export default function ProjectDetail() {
           )}
         </div>
       </main>
+
+      {/* Floating "Consultar proyecto" button */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20 pb-safe">
+        <button
+          onClick={() => setShowProjectChat(true)}
+          className="flex items-center gap-2.5 px-5 py-3.5 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:bg-primary/90 active:scale-95 transition-all font-medium text-sm"
+        >
+          <MessageSquare className="h-4 w-4" />
+          Consultar proyecto con IA
+        </button>
+      </div>
+
+      {/* Project chat sheet */}
+      {showProjectChat && (
+        <ProjectChatSheet
+          projectId={projectId}
+          projectName={project?.name ?? 'Proyecto'}
+          onClose={() => setShowProjectChat(false)}
+        />
+      )}
     </div>
   );
 }
@@ -132,11 +200,11 @@ type FormValues = z.infer<typeof formSchema>;
 function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number, open: boolean, onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const createMeeting = useCreateMeeting();
-  
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { 
-      title: "", 
+    defaultValues: {
+      title: "",
       date: format(new Date(), 'yyyy-MM-dd'),
       notes: ""
     }
@@ -211,19 +279,19 @@ function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number
                 <FormItem>
                   <FormLabel>Initial Notes (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Jot down some initial thoughts..." 
+                    <Textarea
+                      placeholder="Jot down some initial thoughts..."
                       className="rounded-xl resize-none min-h-[120px]"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <Button 
-              type="submit" 
-              className="w-full rounded-xl mt-4 h-12 text-base font-medium" 
+            <Button
+              type="submit"
+              className="w-full rounded-xl mt-4 h-12 text-base font-medium"
               disabled={createMeeting.isPending}
             >
               {createMeeting.isPending ? 'Saving...' : 'Save Meeting'}
