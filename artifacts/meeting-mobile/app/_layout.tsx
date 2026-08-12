@@ -11,6 +11,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
+import Feather from '@expo/vector-icons/Feather';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
@@ -50,9 +51,8 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    // Font family name must match what createIconSet registers ('feather', lowercase).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
+    // Use the exact same asset reference the library uses internally.
+    ...Feather.font,
   });
 
   useEffect(() => {
