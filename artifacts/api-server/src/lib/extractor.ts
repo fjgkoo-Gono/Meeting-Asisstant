@@ -1,7 +1,10 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execFileSync, spawnSync } from "child_process";
+import { execFile, execFileSync, spawnSync } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * If `fileRef` is a URL (Cloudinary or otherwise), download it to a temporary
@@ -21,15 +24,6 @@ async function downloadToTemp(fileRef: string, ext: string): Promise<string> {
 
 export type MaterialType = "photo" | "image" | "pdf" | "excel" | "text" | "audio";
 
-const AUDIO_MIME_TYPES: Record<string, string> = {
-  ".mp3": "audio/mpeg",
-  ".mp4": "audio/mp4",
-  ".m4a": "audio/mp4",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-  ".webm": "audio/webm",
-  ".flac": "audio/flac",
-};
 
 const IMAGE_MIME_TYPES: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
   ".jpg": "image/jpeg",
@@ -40,11 +34,23 @@ const IMAGE_MIME_TYPES: Record<string, "image/jpeg" | "image/png" | "image/gif" 
 };
 
 /**
- * Files larger than this threshold are split into chunks before transcription.
- * Anthropic's API accepts ~20 MB request bodies; base64 inflates by ~33%,
- * so we use 15 MB as a safe ceiling for the raw audio file.
+ * whisper-cpp inference binary — resolved from PATH.
+ * The Nix package `whisper-cpp` v1.7+ exposes the binary as `whisper-cli`.
+ * Declared as a Nix package in .replit so it is available in all environments.
  */
-const AUDIO_CHUNK_THRESHOLD = 15 * 1024 * 1024; // 15 MB
+const WHISPER_CPP_BIN = "whisper-cli";
+
+/**
+ * whisper-cpp model downloader — resolved from PATH.
+ * Declared as a Nix package in .replit so it is available in all environments.
+ */
+const WHISPER_DOWNLOAD_BIN = "whisper-cpp-download-ggml-model";
+
+/** Directory where GGML models are stored (relative to api-server package root). */
+const MODELS_DIR = path.resolve(process.cwd(), "models");
+
+/** Path to the GGML model used for transcription. */
+const MODEL_PATH = path.join(MODELS_DIR, "ggml-base.bin");
 
 /** How long each ffmpeg segment should be (in seconds). */
 const SEGMENT_SECONDS = 300; // 5 minutes
@@ -154,62 +160,72 @@ function findBestCutPoint(
 }
 
 /**
- * Transcribe a single audio file (must be under the API size limit).
- * The file is read, base64-encoded, and sent to Claude.
+ * Ensure the GGML model file exists; download it if not.
+ * Downloads to MODELS_DIR using the whisper-cpp download helper.
  */
-async function transcribeAudioChunk(
-  filePath: string,
-  apiKey: string,
-  mimeType: string,
-): Promise<string> {
-  const audioBuffer = fs.readFileSync(filePath);
-  const base64Audio = audioBuffer.toString("base64");
+function ensureModel(): void {
+  if (fs.existsSync(MODEL_PATH)) return;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-opus-4-5",
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "audio",
-              source: {
-                type: "base64",
-                media_type: mimeType,
-                data: base64Audio,
-              },
-            },
-            {
-              type: "text",
-              text: "Please transcribe this audio recording verbatim. Output only the transcript text with no additional commentary, headers, or formatting. If there are multiple speakers, prefix each speaker's lines with 'Speaker 1:', 'Speaker 2:', etc.",
-            },
-          ],
-        },
-      ],
-    }),
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  console.log(`[whisper] Downloading ggml-base model to ${MODELS_DIR}…`);
+
+  // The download script saves the model into the cwd, so we run it from MODELS_DIR
+  execFileSync(WHISPER_DOWNLOAD_BIN, ["base"], {
+    cwd: MODELS_DIR,
+    stdio: "inherit",
   });
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Anthropic transcription API error ${response.status}: ${errBody}`);
+  // The script names the file "ggml-base.bin" — verify it landed
+  if (!fs.existsSync(MODEL_PATH)) {
+    throw new Error(`Model download failed: expected ${MODEL_PATH} to exist after download`);
   }
+  console.log("[whisper] Model download complete.");
+}
 
-  const data = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
-  };
-  const textBlock = data.content.find((b) => b.type === "text");
-  if (!textBlock?.text) {
-    throw new Error("No text content in transcription response");
+/**
+ * Transcribe a single audio file using whisper-cpp (local, no API cost).
+ *
+ * Strategy:
+ *  1. Convert the input to 16 kHz mono WAV with ffmpeg (whisper-cpp requirement).
+ *  2. Run whisper-cpp asynchronously with --output-txt; it writes <outBase>.txt.
+ *  3. Read and return that file's contents.
+ *  4. Clean up temp files in all cases.
+ *
+ * Both ffmpeg and whisper-cpp are declared as Nix packages in .replit and
+ * resolved from PATH — no hardcoded store paths.
+ */
+async function transcribeAudioChunk(filePath: string): Promise<string> {
+  ensureModel();
+
+  const tmpWav = path.join(os.tmpdir(), `whisper-in-${Date.now()}.wav`);
+  const tmpOut = path.join(os.tmpdir(), `whisper-out-${Date.now()}`);
+  const tmpTxt = `${tmpOut}.txt`;
+
+  try {
+    // Convert to 16 kHz mono PCM WAV — the only format whisper-cpp accepts reliably.
+    // ffmpeg conversion is quick (< 1 s for a 5-min chunk) so sync is fine here.
+    execFileSync(
+      "ffmpeg",
+      ["-i", filePath, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", "-y", tmpWav],
+      { stdio: "pipe" },
+    );
+
+    // Transcribe asynchronously so the event loop is not blocked during inference
+    // (can take 30 s–several minutes for long chunks).
+    // -nt = no timestamps, -l auto = auto-detect spoken language
+    await execFileAsync(
+      WHISPER_CPP_BIN,
+      ["-m", MODEL_PATH, "-otxt", "-of", tmpOut, "-nt", "-l", "auto", tmpWav],
+    );
+
+    if (!fs.existsSync(tmpTxt)) {
+      throw new Error("whisper-cpp produced no output file");
+    }
+    return fs.readFileSync(tmpTxt, "utf8").trim();
+  } finally {
+    try { fs.unlinkSync(tmpWav); } catch { /* ignore */ }
+    try { fs.unlinkSync(tmpTxt); } catch { /* ignore */ }
   }
-  return textBlock.text.trim();
 }
 
 /**
@@ -226,10 +242,7 @@ async function transcribeAudioChunk(
  *  4. Extract each segment with `-ss` / `-to` (avoids the segment muxer's
  *     strict fixed-length cuts that cause mid-word splits).
  */
-async function transcribeLargeAudio(
-  filePath: string,
-  apiKey: string,
-): Promise<string> {
+async function transcribeLargeAudio(filePath: string): Promise<string> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-chunks-"));
 
   try {
@@ -283,10 +296,10 @@ async function transcribeLargeAudio(
       throw new Error("ffmpeg produced no audio segments — the file may be corrupt or unsupported");
     }
 
-    // ── 5. Transcribe sequentially (respect API rate limits) ─────────────
+    // ── 5. Transcribe sequentially (async — does not block the event loop) ──
     const transcripts: string[] = [];
     for (const chunkPath of chunkPaths) {
-      const text = await transcribeAudioChunk(chunkPath, apiKey, "audio/mpeg");
+      const text = await transcribeAudioChunk(chunkPath);
       transcripts.push(text);
     }
 
@@ -410,29 +423,16 @@ export async function extractText(
       }
 
       case "audio": {
-        const apiKey = process.env.ANTHROPIC_API_KEY;
-        if (!apiKey) {
-          throw new Error("ANTHROPIC_API_KEY is not configured");
-        }
-
-        const ext = path.extname(localPath).toLowerCase();
-        const mimeType = AUDIO_MIME_TYPES[ext] ?? "audio/mpeg";
+        // All audio is transcribed locally via whisper-cpp — no API cost.
+        // Large files are split into 5-minute segments by transcribeLargeAudio;
+        // small files are transcribed directly by transcribeAudioChunk.
         const fileSize = fs.statSync(localPath).size;
+        const LARGE_AUDIO_THRESHOLD = 25 * 1024 * 1024; // 25 MB raw audio → always chunk
 
-        if (fileSize >= AUDIO_CHUNK_THRESHOLD) {
-          // Large file: verify ffmpeg is available before attempting
-          try {
-            execFileSync("ffmpeg", ["-version"], { stdio: "pipe" });
-          } catch {
-            throw new Error(
-              `Audio file is too large to transcribe directly (${Math.round(fileSize / 1024 / 1024)} MB > ${Math.round(AUDIO_CHUNK_THRESHOLD / 1024 / 1024)} MB limit) and ffmpeg is not available for chunking. Please split the file into smaller parts manually.`,
-            );
-          }
-          return await transcribeLargeAudio(localPath, apiKey);
+        if (fileSize >= LARGE_AUDIO_THRESHOLD) {
+          return await transcribeLargeAudio(localPath);
         }
-
-        // Small file: transcribe directly
-        return await transcribeAudioChunk(localPath, apiKey, mimeType);
+        return transcribeAudioChunk(localPath);
       }
 
       default:

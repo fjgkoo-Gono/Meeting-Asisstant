@@ -49,10 +49,10 @@ export async function uploadBuffer(
   const tmpPath = path.join(os.tmpdir(), `cloudinary-upload-${Date.now()}`);
   try {
     fs.writeFileSync(tmpPath, buffer);
-    const result = await cloudinary.uploader.upload_large(tmpPath, {
+    const result = (await cloudinary.uploader.upload_large(tmpPath, {
       ...options,
       chunk_size: 20 * 1024 * 1024, // 20 MB chunks
-    });
+    })) as import("cloudinary").UploadApiResponse;
     return { secure_url: result.secure_url, public_id: result.public_id };
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
