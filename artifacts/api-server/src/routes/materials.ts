@@ -137,11 +137,13 @@ router.post(
     const materialType = rawType as MaterialType;
     const rawContextNote = req.body?.contextNote as string | undefined;
 
-    // Upload file buffer to Cloudinary
+    // Upload file buffer to Cloudinary, preserving the original file extension
+    // so browsers can identify the file type from the URL (e.g. .pdf, .xlsx)
     let cloudinaryUrl: string;
     try {
       const resourceType = getResourceType(materialType);
-      const { secure_url } = await uploadBuffer(req.file.buffer, resourceType);
+      const ext = path.extname(req.file.originalname).slice(1).toLowerCase(); // e.g. "pdf"
+      const { secure_url } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
       cloudinaryUrl = secure_url;
     } catch (uploadErr) {
       logger.error({ uploadErr }, "Cloudinary upload failed");

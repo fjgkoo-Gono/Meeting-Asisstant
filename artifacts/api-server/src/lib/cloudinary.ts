@@ -22,10 +22,11 @@ export function getResourceType(materialType: string): "image" | "video" | "raw"
 export function uploadBuffer(
   buffer: Buffer,
   resourceType: "image" | "video" | "raw",
+  format?: string,
 ): Promise<{ secure_url: string; public_id: string }> {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { resource_type: resourceType, folder: "meeting-materials", use_filename: false },
+      { resource_type: resourceType, folder: "meeting-materials", use_filename: false, ...(format ? { format } : {}) },
       (error, result) => {
         if (error) return reject(error);
         if (!result) return reject(new Error("No result from Cloudinary upload"));
