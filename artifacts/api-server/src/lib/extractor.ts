@@ -3,6 +3,22 @@ import os from "os";
 import path from "path";
 import { execFileSync, spawnSync } from "child_process";
 
+/**
+ * If `fileRef` is a URL (Cloudinary or otherwise), download it to a temporary
+ * local file and return its path. Returns null if `fileRef` is already a local
+ * path. The caller is responsible for deleting the temp file when done.
+ */
+async function downloadToTemp(fileRef: string, ext: string): Promise<string> {
+  const tmpPath = path.join(os.tmpdir(), `meeting-extract-${Date.now()}${ext}`);
+  const response = await fetch(fileRef);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch material from storage (${response.status}): ${fileRef}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  fs.writeFileSync(tmpPath, buffer);
+  return tmpPath;
+}
+
 export type MaterialType = "photo" | "image" | "pdf" | "excel" | "text" | "audio";
 
 const AUDIO_MIME_TYPES: Record<string, string> = {
@@ -286,128 +302,146 @@ async function transcribeLargeAudio(
 }
 
 /**
- * Extract plain text from an uploaded file based on its material type.
- * Returns the extracted text or throws on error.
+ * Extract plain text from an uploaded material.
+ * `fileRef` may be a local filesystem path (legacy) or a Cloudinary HTTPS URL.
+ * When it is a URL the file is downloaded to a temporary location first.
  */
 export async function extractText(
-  filePath: string,
+  fileRef: string,
   type: MaterialType,
 ): Promise<string> {
-  switch (type) {
-    case "pdf": {
-      // Dynamic import avoids pdf-parse trying to load test fixtures at startup.
-      // pdf-parse v2 exposes a class-based API: new PDFParse({ data }) → .getText()
-      const { PDFParse, VerbosityLevel } = (await import("pdf-parse")) as unknown as {
-        PDFParse: new (opts: { data: Buffer; verbosity?: number }) => {
-          getText(): Promise<{ text: string }>;
+  // Resolve remote URL → local temp file so all cases below can read from disk
+  let localPath = fileRef;
+  let tmpDownload: string | null = null;
+
+  if (fileRef.startsWith("http")) {
+    const urlExt = path.extname(new URL(fileRef).pathname) || "";
+    tmpDownload = await downloadToTemp(fileRef, urlExt);
+    localPath = tmpDownload;
+  }
+
+  try {
+    switch (type) {
+      case "pdf": {
+        // Dynamic import avoids pdf-parse trying to load test fixtures at startup.
+        // pdf-parse v2 exposes a class-based API: new PDFParse({ data }) → .getText()
+        const { PDFParse, VerbosityLevel } = (await import("pdf-parse")) as unknown as {
+          PDFParse: new (opts: { data: Buffer; verbosity?: number }) => {
+            getText(): Promise<{ text: string }>;
+          };
+          VerbosityLevel: { ERRORS: number };
         };
-        VerbosityLevel: { ERRORS: number };
-      };
 
-      const dataBuffer = fs.readFileSync(filePath);
-      const parser = new PDFParse({ data: dataBuffer, verbosity: VerbosityLevel.ERRORS });
-      const result = await parser.getText();
-      return result.text.trim();
-    }
-
-    case "excel": {
-      const xlsx = (await import("xlsx")) as typeof import("xlsx");
-      const workbook = xlsx.readFile(filePath);
-      const texts: string[] = [];
-      for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName];
-        const csv = xlsx.utils.sheet_to_csv(sheet);
-        if (csv.trim()) texts.push(`Sheet: ${sheetName}\n${csv}`);
-      }
-      return texts.join("\n\n").trim();
-    }
-
-    case "photo":
-    case "image": {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error("ANTHROPIC_API_KEY is not configured");
+        const dataBuffer = fs.readFileSync(localPath);
+        const parser = new PDFParse({ data: dataBuffer, verbosity: VerbosityLevel.ERRORS });
+        const result = await parser.getText();
+        return result.text.trim();
       }
 
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeType = IMAGE_MIME_TYPES[ext] ?? "image/jpeg";
-      const imageBuffer = fs.readFileSync(filePath);
-      const base64Image = imageBuffer.toString("base64");
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-opus-4-5",
-          max_tokens: 2048,
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image",
-                  source: {
-                    type: "base64",
-                    media_type: mimeType,
-                    data: base64Image,
-                  },
-                },
-                {
-                  type: "text",
-                  text: "Analiza esta imagen en detalle. Si contiene texto, tablas, gráficos o datos, extráelos y transcríbelos fielmente. Si es una foto de una reunión, pizarrón o documento, describe todo el contenido visible. Responde solo con el contenido extraído, sin comentarios adicionales.",
-                },
-              ],
-            },
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        const errBody = await response.text();
-        throw new Error(`Anthropic vision API error ${response.status}: ${errBody}`);
-      }
-
-      const data = (await response.json()) as {
-        content: Array<{ type: string; text?: string }>;
-      };
-      const textBlock = data.content.find((b) => b.type === "text");
-      if (!textBlock || !textBlock.text) {
-        throw new Error("No text content in vision response");
-      }
-      return textBlock.text.trim();
-    }
-
-    case "audio": {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error("ANTHROPIC_API_KEY is not configured");
-      }
-
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeType = AUDIO_MIME_TYPES[ext] ?? "audio/mpeg";
-      const fileSize = fs.statSync(filePath).size;
-
-      if (fileSize >= AUDIO_CHUNK_THRESHOLD) {
-        // Large file: verify ffmpeg is available before attempting
-        try {
-          execFileSync("ffmpeg", ["-version"], { stdio: "pipe" });
-        } catch {
-          throw new Error(
-            `Audio file is too large to transcribe directly (${Math.round(fileSize / 1024 / 1024)} MB > ${Math.round(AUDIO_CHUNK_THRESHOLD / 1024 / 1024)} MB limit) and ffmpeg is not available for chunking. Please split the file into smaller parts manually.`,
-          );
+      case "excel": {
+        const xlsx = (await import("xlsx")) as typeof import("xlsx");
+        const workbook = xlsx.readFile(localPath);
+        const texts: string[] = [];
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const csv = xlsx.utils.sheet_to_csv(sheet);
+          if (csv.trim()) texts.push(`Sheet: ${sheetName}\n${csv}`);
         }
-        return await transcribeLargeAudio(filePath, apiKey);
+        return texts.join("\n\n").trim();
       }
 
-      // Small file: transcribe directly
-      return await transcribeAudioChunk(filePath, apiKey, mimeType);
-    }
+      case "photo":
+      case "image": {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+          throw new Error("ANTHROPIC_API_KEY is not configured");
+        }
 
-    default:
-      return "";
+        const ext = path.extname(localPath).toLowerCase();
+        const mimeType = IMAGE_MIME_TYPES[ext] ?? "image/jpeg";
+        const imageBuffer = fs.readFileSync(localPath);
+        const base64Image = imageBuffer.toString("base64");
+
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-opus-4-5",
+            max_tokens: 2048,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "image",
+                    source: {
+                      type: "base64",
+                      media_type: mimeType,
+                      data: base64Image,
+                    },
+                  },
+                  {
+                    type: "text",
+                    text: "Analiza esta imagen en detalle. Si contiene texto, tablas, gráficos o datos, extráelos y transcríbelos fielmente. Si es una foto de una reunión, pizarrón o documento, describe todo el contenido visible. Responde solo con el contenido extraído, sin comentarios adicionales.",
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          throw new Error(`Anthropic vision API error ${response.status}: ${errBody}`);
+        }
+
+        const data = (await response.json()) as {
+          content: Array<{ type: string; text?: string }>;
+        };
+        const textBlock = data.content.find((b) => b.type === "text");
+        if (!textBlock || !textBlock.text) {
+          throw new Error("No text content in vision response");
+        }
+        return textBlock.text.trim();
+      }
+
+      case "audio": {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+          throw new Error("ANTHROPIC_API_KEY is not configured");
+        }
+
+        const ext = path.extname(localPath).toLowerCase();
+        const mimeType = AUDIO_MIME_TYPES[ext] ?? "audio/mpeg";
+        const fileSize = fs.statSync(localPath).size;
+
+        if (fileSize >= AUDIO_CHUNK_THRESHOLD) {
+          // Large file: verify ffmpeg is available before attempting
+          try {
+            execFileSync("ffmpeg", ["-version"], { stdio: "pipe" });
+          } catch {
+            throw new Error(
+              `Audio file is too large to transcribe directly (${Math.round(fileSize / 1024 / 1024)} MB > ${Math.round(AUDIO_CHUNK_THRESHOLD / 1024 / 1024)} MB limit) and ffmpeg is not available for chunking. Please split the file into smaller parts manually.`,
+            );
+          }
+          return await transcribeLargeAudio(localPath, apiKey);
+        }
+
+        // Small file: transcribe directly
+        return await transcribeAudioChunk(localPath, apiKey, mimeType);
+      }
+
+      default:
+        return "";
+    }
+  } finally {
+    // Clean up the temp download (if any) regardless of success or failure
+    if (tmpDownload) {
+      try { fs.unlinkSync(tmpDownload); } catch { /* ignore */ }
+    }
   }
 }

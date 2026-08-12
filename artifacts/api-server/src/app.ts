@@ -30,7 +30,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files so the frontend can open/preview them
+// Legacy: serve pre-Cloudinary uploads from disk (dev only; not present in production)
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 app.use("/api/files", express.static(UPLOADS_DIR));
 

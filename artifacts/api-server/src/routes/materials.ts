@@ -14,28 +14,28 @@ import {
   DeleteMaterialParams,
 } from "@workspace/api-zod";
 import { extractText, type MaterialType } from "../lib/extractor";
+import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// Ensure uploads directory exists
+// Legacy uploads directory — used only for pre-Cloudinary materials still on disk
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+/**
+ * Resolve a material's stored filename to a value extractText can consume.
+ * - Cloudinary URL (starts with http) → passed through as-is (extractor downloads it)
+ * - Legacy short name → resolved to the local uploads directory path
+ */
+function resolveFileRef(filename: string): string {
+  if (filename.startsWith("http")) return filename;
+  return path.join(UPLOADS_DIR, filename);
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `${unique}${ext}`);
-  },
-});
-
+// Use memory storage — files go to Cloudinary, not local disk
 const upload = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (audio files can be large)
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
 });
 
 const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel", "audio"];
@@ -135,15 +135,26 @@ router.post(
     }
 
     const materialType = rawType as MaterialType;
-
     const rawContextNote = req.body?.contextNote as string | undefined;
+
+    // Upload file buffer to Cloudinary
+    let cloudinaryUrl: string;
+    try {
+      const resourceType = getResourceType(materialType);
+      const { secure_url } = await uploadBuffer(req.file.buffer, resourceType);
+      cloudinaryUrl = secure_url;
+    } catch (uploadErr) {
+      logger.error({ uploadErr }, "Cloudinary upload failed");
+      res.status(500).json({ error: "Failed to upload file to storage" });
+      return;
+    }
 
     const { data, error } = await supabase
       .from("materials")
       .insert({
         meeting_id: params.data.meetingId,
         type: materialType,
-        filename: req.file.filename,
+        filename: cloudinaryUrl,          // full Cloudinary URL
         original_name: req.file.originalname,
         extracted_text: null,
         context_note: rawContextNote?.trim() || null,
@@ -155,14 +166,12 @@ router.post(
 
     res.status(201).json(CreateMaterialResponse.parse(toCamel(data)));
 
-    // Async extraction after response
+    // Async extraction after response — extractor handles URL-based paths
     const materialId = data.id;
+    const fileUrl = cloudinaryUrl;
     setImmediate(async () => {
       try {
-        const text = await extractText(
-          path.join(UPLOADS_DIR, req.file!.filename),
-          materialType,
-        );
+        const text = await extractText(fileUrl, materialType);
         await supabase
           .from("materials")
           .update({ extracted_text: text, status: "ready" })
@@ -213,12 +222,10 @@ router.post(
     res.json(RetryMaterialResponse.parse(toCamel(updated)));
 
     const materialId = params.data.materialId;
+    const fileRef = resolveFileRef(material.filename); // Cloudinary URL or resolved legacy path
     setImmediate(async () => {
       try {
-        const text = await extractText(
-          path.join(UPLOADS_DIR, material.filename),
-          material.type as MaterialType,
-        );
+        const text = await extractText(fileRef, material.type as MaterialType);
         await supabase
           .from("materials")
           .update({ extracted_text: text, status: "ready" })
@@ -254,13 +261,22 @@ router.delete(
 
     if (error || !deleted) { res.status(404).json({ error: "Material not found" }); return; }
 
+    // Clean up the stored file (async, non-blocking)
     if (deleted.filename) {
-      const filePath = path.join(UPLOADS_DIR, deleted.filename);
-      fs.unlink(filePath, (err) => {
-        if (err && (err as NodeJS.ErrnoException).code !== "ENOENT") {
-          logger.warn({ err, materialId: deleted.id }, "Failed to delete material file");
-        }
-      });
+      if (deleted.filename.startsWith("http")) {
+        // New Cloudinary-backed material
+        deleteFromUrl(deleted.filename).catch((err) =>
+          logger.warn({ err, materialId: deleted.id }, "Failed to delete Cloudinary asset"),
+        );
+      } else {
+        // Legacy local file
+        const legacyPath = path.join(UPLOADS_DIR, deleted.filename);
+        fs.unlink(legacyPath, (err) => {
+          if (err && (err as NodeJS.ErrnoException).code !== "ENOENT") {
+            logger.warn({ err, materialId: deleted.id }, "Failed to delete legacy material file");
+          }
+        });
+      }
     }
 
     res.status(204).send();

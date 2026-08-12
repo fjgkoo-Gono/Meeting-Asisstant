@@ -323,7 +323,12 @@ function MaterialCard({
   const [showText, setShowText] = useState(false);
 
   const hasFile = material.type !== 'text' && material.filename;
-  const fileUrl = hasFile ? `/api/files/${material.filename}` : null;
+  // New uploads store a full Cloudinary URL; legacy entries have a short filename served from /api/files/
+  const fileUrl = hasFile
+    ? material.filename.startsWith('http')
+      ? material.filename
+      : `/api/files/${material.filename}`
+    : null;
 
   // Open file in a new tab. We open the blank window *synchronously* (before
   // any await) so popup blockers don't block it, then load the blob URL into

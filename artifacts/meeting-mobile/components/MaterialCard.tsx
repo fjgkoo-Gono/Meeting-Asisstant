@@ -178,7 +178,12 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
         : 'Failed';
 
   const hasFile = material.type !== 'text' && material.filename;
-  const fileUrl = hasFile ? `${getBaseUrl()}/api/files/${material.filename}` : null;
+  // New uploads store a full Cloudinary URL; legacy entries have a short name served via /api/files/
+  const fileUrl = hasFile
+    ? material.filename.startsWith('http')
+      ? material.filename
+      : `${getBaseUrl()}/api/files/${material.filename}`
+    : null;
   const hasText =
     (material.type === 'text' || (material.type === 'audio' && material.status === 'ready')) &&
     !!material.extractedText;
