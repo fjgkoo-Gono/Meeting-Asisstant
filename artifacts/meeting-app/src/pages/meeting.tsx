@@ -330,14 +330,22 @@ function MaterialCard({
       : `/api/files/${material.filename}`
     : null;
 
-  // Open file in a new tab. We open the blank window *synchronously* (before
-  // any await) so popup blockers don't block it, then load the blob URL into
-  // it once the fetch completes. This avoids the common failure where
-  // window.open called after an await is silently blocked.
+  // Open file in a new tab.
+  // For Cloudinary URLs (https://...) we open directly — no fetch needed.
+  // For legacy local /api/files/ paths we fetch a blob first so the service
+  // worker doesn't intercept the navigation; we omit "noopener" on the
+  // synchronous window.open so the returned reference stays non-null.
   const handleOpen = async () => {
     if (!fileUrl) return;
-    // Open now, synchronously, so the browser sees it as a direct user gesture
-    const win = window.open('', '_blank', 'noopener,noreferrer');
+
+    // Cloudinary or any absolute URL: open directly
+    if (fileUrl.startsWith('http')) {
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // Legacy local file: fetch as blob then navigate the pre-opened window
+    const win = window.open('', '_blank'); // no "noopener" — we need the reference
     try {
       const res = await fetch(fileUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -346,25 +354,11 @@ function MaterialCard({
       if (win) {
         win.location.href = blobUrl;
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-      } else {
-        // If the window was somehow blocked, try a direct anchor click
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
       }
     } catch {
-      // Fetch failed — navigate the already-open window to the direct URL.
-      // The SW navigateFallbackDenylist(/^\/api\//) prevents it from serving
-      // index.html for this navigation.
+      // Fetch failed — navigate to the direct URL as fallback
       if (win) {
         win.location.href = fileUrl;
-      } else {
-        window.open(fileUrl, '_blank', 'noopener,noreferrer');
       }
     }
   };
