@@ -46,14 +46,13 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  // @expo/vector-icons v15 + Expo SDK 54 loads its own fonts automatically.
+  // Only load the Inter variants here; adding the Feather TTF manually interferes.
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    // Vector icon font — key must match the font family name Feather component expects.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    Feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
   });
 
   useEffect(() => {
