@@ -74,10 +74,13 @@ export default defineConfig({
             }
           },
           {
+            // Scripts and styles: NetworkFirst so new deploys are picked up immediately.
+            // Falls back to cache only when offline.
             urlPattern: ({ request }) => request.destination === 'document' || request.destination === 'script' || request.destination === 'style',
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'static-assets-cache',
+              networkTimeoutSeconds: 5,
             }
           }
         ]
