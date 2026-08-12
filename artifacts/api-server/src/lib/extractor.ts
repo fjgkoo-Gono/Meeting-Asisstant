@@ -180,7 +180,7 @@ async function transcribeAudioChunk(
           role: "user",
           content: [
             {
-              type: "document",
+              type: "audio",
               source: {
                 type: "base64",
                 media_type: mimeType,
