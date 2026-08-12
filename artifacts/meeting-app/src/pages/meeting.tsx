@@ -326,11 +326,9 @@ function MaterialCard({
   // Cloudinary raw resources (pdf, excel, audio) cannot be opened directly in
   // the browser — Cloudinary blocks unauthenticated access.  Route all file
   // opens through our API proxy which generates a signed, time-limited URL.
-  // Legacy short names are still served from /api/files/.
+  // All file types (GCS, Cloudinary, legacy disk) go through the proxy route.
   const fileUrl = hasFile
-    ? material.filename.startsWith('http')
-      ? `/api/materials/${material.id}/file`
-      : `/api/files/${material.filename}`
+    ? `/api/materials/${material.id}/file`
     : null;
 
   // Open file in a new tab via blob fetch so the service worker doesn't
