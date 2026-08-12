@@ -51,8 +51,10 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    // Vector icon fonts — must be pre-loaded or icons render as broken boxes
-    ...Feather.font,
+    // Vector icon font — explicit require so Metro bundles the TTF asset directly.
+    // Spreading Feather.font is unreliable in some Expo configurations.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
   });
 
   useEffect(() => {
