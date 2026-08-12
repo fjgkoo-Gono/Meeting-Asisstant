@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
@@ -114,13 +115,14 @@ export default function ProjectChatScreen() {
   }
 
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const headerHeight = useHeaderHeight();
   const reversedMessages = [...messages].reverse();
 
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior="padding"
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={headerHeight}
     >
       {!chatLoaded ? (
         <View style={styles.center}>

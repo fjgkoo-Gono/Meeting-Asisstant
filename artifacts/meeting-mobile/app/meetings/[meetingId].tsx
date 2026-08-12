@@ -11,11 +11,11 @@ import {
   RefreshControl,
   TextInput,
   Alert,
-  KeyboardAvoidingView as RNKeyboardAvoidingView,
-  ScrollView,
   ActionSheetIOS,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -60,6 +60,7 @@ export default function MeetingDetailScreen() {
   }>();
   const mid = Number(meetingId);
   const pid = Number(projectId);
+  const headerHeight = useHeaderHeight();
 
   const [activeTab, setActiveTab] = useState<Tab>('materials');
 
@@ -557,7 +558,7 @@ export default function MeetingDetailScreen() {
 
       {/* Chat tab */}
       {activeTab === 'chat' && (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerHeight}>
           {!chatLoaded ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
@@ -605,79 +606,74 @@ export default function MeetingDetailScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setShowEditModal(false)}
       >
-        <RNKeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Meeting</Text>
-              <Pressable
-                onPress={handleSaveMeeting}
-                disabled={!editTitle.trim() || updatingMeeting}
-                hitSlop={8}
-              >
-                {updatingMeeting ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveBtn,
-                      { color: editTitle.trim() ? colors.primary : colors.mutedForeground },
-                    ]}
-                  >
-                    Save
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Meeting title"
-                placeholderTextColor={colors.mutedForeground}
-                value={editTitle}
-                onChangeText={setEditTitle}
-                autoFocus
-                maxLength={200}
-              />
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DATE</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.mutedForeground}
-                value={editDate}
-                onChangeText={setEditDate}
-                maxLength={10}
-                keyboardType="numbers-and-punctuation"
-              />
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTES</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.textArea,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Meeting notes (optional)"
-                placeholderTextColor={colors.mutedForeground}
-                value={editNotes}
-                onChangeText={setEditNotes}
-                multiline
-                maxLength={2000}
-              />
-            </ScrollView>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={() => setShowEditModal(false)} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Meeting</Text>
+            <Pressable
+              onPress={handleSaveMeeting}
+              disabled={!editTitle.trim() || updatingMeeting}
+              hitSlop={8}
+            >
+              {updatingMeeting ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveBtn,
+                    { color: editTitle.trim() ? colors.primary : colors.mutedForeground },
+                  ]}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
           </View>
-        </RNKeyboardAvoidingView>
+          <KeyboardAwareScrollViewCompat style={styles.modalBody}>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Meeting title"
+              placeholderTextColor={colors.mutedForeground}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              autoFocus
+              maxLength={200}
+            />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DATE</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.mutedForeground}
+              value={editDate}
+              onChangeText={setEditDate}
+              maxLength={10}
+              keyboardType="numbers-and-punctuation"
+            />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTES</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.textArea,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Meeting notes (optional)"
+              placeholderTextColor={colors.mutedForeground}
+              value={editNotes}
+              onChangeText={setEditNotes}
+              multiline
+              maxLength={2000}
+            />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
 
       {/* Text material modal */}
@@ -687,91 +683,86 @@ export default function MeetingDetailScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setShowTextModal(false)}
       >
-        <RNKeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setShowTextModal(false)} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Text Note</Text>
-              <Pressable
-                onPress={() => {
-                  if (!textContent.trim() || creatingMaterial) return;
-                  createMaterial({
-                    projectId: pid,
-                    meetingId: mid,
-                    data: {
-                      type: 'text',
-                      name: textName.trim() || undefined,
-                      content: textContent.trim(),
-                      contextNote: textContextNote.trim() || undefined,
-                    } as Parameters<typeof createMaterial>[0]['data'],
-                  });
-                  setTextContextNote('');
-                }}
-                disabled={!textContent.trim() || creatingMaterial}
-                hitSlop={8}
-              >
-                {creatingMaterial ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveBtn,
-                      { color: textContent.trim() ? colors.primary : colors.mutedForeground },
-                    ]}
-                  >
-                    Save
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE (OPTIONAL)</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Note title"
-                placeholderTextColor={colors.mutedForeground}
-                value={textName}
-                onChangeText={setTextName}
-                maxLength={200}
-              />
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>CONTENT</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.textArea,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Paste or type meeting notes, decisions, action items…"
-                placeholderTextColor={colors.mutedForeground}
-                value={textContent}
-                onChangeText={setTextContent}
-                multiline
-                autoFocus
-                maxLength={20000}
-              />
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTA DE CONTEXTO (OPCIONAL)</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Contexto para el asistente IA…"
-                placeholderTextColor={colors.mutedForeground}
-                value={textContextNote}
-                onChangeText={setTextContextNote}
-                maxLength={500}
-              />
-            </ScrollView>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={() => setShowTextModal(false)} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Text Note</Text>
+            <Pressable
+              onPress={() => {
+                if (!textContent.trim() || creatingMaterial) return;
+                createMaterial({
+                  projectId: pid,
+                  meetingId: mid,
+                  data: {
+                    type: 'text',
+                    name: textName.trim() || undefined,
+                    content: textContent.trim(),
+                    contextNote: textContextNote.trim() || undefined,
+                  } as Parameters<typeof createMaterial>[0]['data'],
+                });
+                setTextContextNote('');
+              }}
+              disabled={!textContent.trim() || creatingMaterial}
+              hitSlop={8}
+            >
+              {creatingMaterial ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveBtn,
+                    { color: textContent.trim() ? colors.primary : colors.mutedForeground },
+                  ]}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
           </View>
-        </RNKeyboardAvoidingView>
+          <KeyboardAwareScrollViewCompat style={styles.modalBody}>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE (OPTIONAL)</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Note title"
+              placeholderTextColor={colors.mutedForeground}
+              value={textName}
+              onChangeText={setTextName}
+              maxLength={200}
+            />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>CONTENT</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.textArea,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Paste or type meeting notes, decisions, action items…"
+              placeholderTextColor={colors.mutedForeground}
+              value={textContent}
+              onChangeText={setTextContent}
+              multiline
+              autoFocus
+              maxLength={20000}
+            />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTA DE CONTEXTO (OPCIONAL)</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Contexto para el asistente IA…"
+              placeholderTextColor={colors.mutedForeground}
+              value={textContextNote}
+              onChangeText={setTextContextNote}
+              maxLength={500}
+            />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
 
       {/* Context note modal — shown after picking a file, before uploading */}
@@ -781,58 +772,53 @@ export default function MeetingDetailScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setPendingUpload(null)}
       >
-        <RNKeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setPendingUpload(null)} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Nota de contexto</Text>
-              <Pressable onPress={() => handleConfirmUpload(contextNoteInput)} hitSlop={8}>
-                <Text style={[styles.saveBtn, { color: colors.primary }]}>Subir</Text>
-              </Pressable>
-            </View>
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {/* File badge */}
-              <View style={[styles.fileBadge, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-                <Feather name="paperclip" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.fileBadgeText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {pendingUpload?.fileName ?? ''}
-                </Text>
-              </View>
-
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
-                NOTA PARA EL ASISTENTE IA (OPCIONAL)
-              </Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.contextNoteArea,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder={'Ej: "Presupuesto Q3 aprobado" o "Foto de la pizarra del diagrama de flujo"'}
-                placeholderTextColor={colors.mutedForeground}
-                value={contextNoteInput}
-                onChangeText={setContextNoteInput}
-                multiline
-                autoFocus
-                maxLength={500}
-              />
-              <Pressable
-                onPress={() => handleConfirmUpload('')}
-                hitSlop={8}
-                style={styles.skipBtn}
-              >
-                <Text style={[styles.skipText, { color: colors.mutedForeground }]}>
-                  Omitir y subir sin nota
-                </Text>
-              </Pressable>
-            </ScrollView>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={() => setPendingUpload(null)} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Nota de contexto</Text>
+            <Pressable onPress={() => handleConfirmUpload(contextNoteInput)} hitSlop={8}>
+              <Text style={[styles.saveBtn, { color: colors.primary }]}>Subir</Text>
+            </Pressable>
           </View>
-        </RNKeyboardAvoidingView>
+          <KeyboardAwareScrollViewCompat style={styles.modalBody}>
+            {/* File badge */}
+            <View style={[styles.fileBadge, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Feather name="paperclip" size={14} color={colors.mutedForeground} />
+              <Text style={[styles.fileBadgeText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                {pendingUpload?.fileName ?? ''}
+              </Text>
+            </View>
+
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+              NOTA PARA EL ASISTENTE IA (OPCIONAL)
+            </Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.contextNoteArea,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder={'Ej: "Presupuesto Q3 aprobado" o "Foto de la pizarra del diagrama de flujo"'}
+              placeholderTextColor={colors.mutedForeground}
+              value={contextNoteInput}
+              onChangeText={setContextNoteInput}
+              multiline
+              autoFocus
+              maxLength={500}
+            />
+            <Pressable
+              onPress={() => handleConfirmUpload('')}
+              hitSlop={8}
+              style={styles.skipBtn}
+            >
+              <Text style={[styles.skipText, { color: colors.mutedForeground }]}>
+                Omitir y subir sin nota
+              </Text>
+            </Pressable>
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
 
       {/* Android custom add-material bottom sheet */}

@@ -57,6 +57,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@react-navigation/elements": "^2.9.38",
     "expo-document-picker": "~14.0.8"
   }
 }

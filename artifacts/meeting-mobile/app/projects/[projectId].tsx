@@ -10,10 +10,9 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
-  KeyboardAvoidingView,
-  ScrollView,
   Alert,
 } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -291,62 +290,57 @@ export default function ProjectDetailScreen() {
         presentationStyle="formSheet"
         onRequestClose={handleCloseEditModal}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={handleCloseEditModal} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
-              <Pressable onPress={handleSaveProject} disabled={!editName.trim() || updatingProject} hitSlop={8}>
-                {updatingProject ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveBtn,
-                      { color: editName.trim() ? colors.primary : colors.mutedForeground },
-                    ]}
-                  >
-                    Save
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Project name"
-                placeholderTextColor={colors.mutedForeground}
-                value={editName}
-                onChangeText={setEditName}
-                autoFocus
-                maxLength={200}
-              />
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DESCRIPTION</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.textArea,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Project description (optional)"
-                placeholderTextColor={colors.mutedForeground}
-                value={editDescription}
-                onChangeText={setEditDescription}
-                multiline
-                maxLength={2000}
-              />
-            </ScrollView>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={handleCloseEditModal} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit Project</Text>
+            <Pressable onPress={handleSaveProject} disabled={!editName.trim() || updatingProject} hitSlop={8}>
+              {updatingProject ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveBtn,
+                    { color: editName.trim() ? colors.primary : colors.mutedForeground },
+                  ]}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
+          <KeyboardAwareScrollViewCompat style={styles.modalBody}>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NAME</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Project name"
+              placeholderTextColor={colors.mutedForeground}
+              value={editName}
+              onChangeText={setEditName}
+              autoFocus
+              maxLength={200}
+            />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DESCRIPTION</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.textArea,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Project description (optional)"
+              placeholderTextColor={colors.mutedForeground}
+              value={editDescription}
+              onChangeText={setEditDescription}
+              multiline
+              maxLength={2000}
+            />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
 
       {/* New Meeting modal */}
@@ -356,78 +350,73 @@ export default function ProjectDetailScreen() {
         presentationStyle="formSheet"
         onRequestClose={handleCloseMeetingModal}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modal, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Pressable onPress={handleCloseMeetingModal} hitSlop={8}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>New Meeting</Text>
-              <Pressable onPress={handleCreateMeeting} disabled={!newTitle.trim() || creating} hitSlop={8}>
-                {creating ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveBtn,
-                      { color: newTitle.trim() ? colors.primary : colors.mutedForeground },
-                    ]}
-                  >
-                    Save
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-
-            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Meeting title"
-                placeholderTextColor={colors.mutedForeground}
-                value={newTitle}
-                onChangeText={setNewTitle}
-                autoFocus
-                maxLength={200}
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DATE</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.mutedForeground}
-                value={newDate}
-                onChangeText={setNewDate}
-                maxLength={10}
-                keyboardType="numbers-and-punctuation"
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTES</Text>
-              <TextInput
-                style={[
-                  styles.formInput,
-                  styles.textArea,
-                  { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-                ]}
-                placeholder="Meeting notes (optional)"
-                placeholderTextColor={colors.mutedForeground}
-                value={newNotes}
-                onChangeText={setNewNotes}
-                multiline
-                maxLength={2000}
-              />
-            </ScrollView>
+        <View style={[styles.modal, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable onPress={handleCloseMeetingModal} hitSlop={8}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </Pressable>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>New Meeting</Text>
+            <Pressable onPress={handleCreateMeeting} disabled={!newTitle.trim() || creating} hitSlop={8}>
+              {creating ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveBtn,
+                    { color: newTitle.trim() ? colors.primary : colors.mutedForeground },
+                  ]}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
+
+          <KeyboardAwareScrollViewCompat style={styles.modalBody}>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>TITLE</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Meeting title"
+              placeholderTextColor={colors.mutedForeground}
+              value={newTitle}
+              onChangeText={setNewTitle}
+              autoFocus
+              maxLength={200}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>DATE</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.mutedForeground}
+              value={newDate}
+              onChangeText={setNewDate}
+              maxLength={10}
+              keyboardType="numbers-and-punctuation"
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>NOTES</Text>
+            <TextInput
+              style={[
+                styles.formInput,
+                styles.textArea,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              placeholder="Meeting notes (optional)"
+              placeholderTextColor={colors.mutedForeground}
+              value={newNotes}
+              onChangeText={setNewNotes}
+              multiline
+              maxLength={2000}
+            />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </Modal>
     </View>
   );
