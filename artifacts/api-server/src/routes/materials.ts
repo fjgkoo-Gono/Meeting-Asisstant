@@ -13,7 +13,7 @@ import {
   RetryMaterialResponse,
   DeleteMaterialParams,
 } from "@workspace/api-zod";
-import { extractText, type MaterialType } from "../lib/extractor";
+import { extractText, extractTextFromBuffer, type MaterialType } from "../lib/extractor";
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
 import { logger } from "../lib/logger";
 
@@ -168,12 +168,14 @@ router.post(
 
     res.status(201).json(CreateMaterialResponse.parse(toCamel(data)));
 
-    // Async extraction after response — extractor handles URL-based paths
+    // Async extraction after response — use the in-memory buffer directly to
+    // avoid re-downloading from Cloudinary (raw resources return 401 on fetch).
     const materialId = data.id;
-    const fileUrl = cloudinaryUrl;
+    const uploadedBuffer = req.file.buffer;
+    const originalName = req.file.originalname;
     setImmediate(async () => {
       try {
-        const text = await extractText(fileUrl, materialType);
+        const text = await extractTextFromBuffer(uploadedBuffer, materialType, originalName);
         await supabase
           .from("materials")
           .update({ extracted_text: text, status: "ready" })

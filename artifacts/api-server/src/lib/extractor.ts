@@ -302,6 +302,29 @@ async function transcribeLargeAudio(
 }
 
 /**
+ * Extract plain text from a Buffer without needing to re-download from storage.
+ * Writes the buffer to a temporary file, runs the same extraction logic as
+ * `extractText`, then cleans up the temp file.
+ *
+ * Use this on the initial upload path where the buffer is already in memory.
+ * Use `extractText` for retry flows where only the stored URL is available.
+ */
+export async function extractTextFromBuffer(
+  buffer: Buffer,
+  type: MaterialType,
+  filename = "file",
+): Promise<string> {
+  const ext = path.extname(filename) || "";
+  const tmpPath = path.join(os.tmpdir(), `meeting-buf-${Date.now()}${ext}`);
+  fs.writeFileSync(tmpPath, buffer);
+  try {
+    return await extractText(tmpPath, type);
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+  }
+}
+
+/**
  * Extract plain text from an uploaded material.
  * `fileRef` may be a local filesystem path (legacy) or a Cloudinary HTTPS URL.
  * When it is a URL the file is downloaded to a temporary location first.
