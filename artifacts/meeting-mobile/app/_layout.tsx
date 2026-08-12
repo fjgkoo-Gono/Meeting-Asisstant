@@ -11,7 +11,6 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import Feather from '@expo/vector-icons/Feather';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
@@ -51,8 +50,6 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    // Use the exact same asset reference the library uses internally.
-    ...Feather.font,
   });
 
   useEffect(() => {
