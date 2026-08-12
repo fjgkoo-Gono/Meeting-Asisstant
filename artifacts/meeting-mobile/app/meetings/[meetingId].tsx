@@ -435,7 +435,7 @@ export default function MeetingDetailScreen() {
             <View style={styles.metaRow}>
               <Feather name="calendar" size={13} color={colors.mutedForeground} />
               <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                {new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
+                {new Date(meeting.date.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', {
                   weekday: 'long',
                   month: 'long',
                   day: 'numeric',

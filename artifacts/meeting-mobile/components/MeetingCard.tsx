@@ -13,7 +13,7 @@ interface Props {
 export function MeetingCard({ meeting, onPress, onLongPress }: Props) {
   const colors = useColors();
 
-  const date = new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
+  const date = new Date(meeting.date.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
