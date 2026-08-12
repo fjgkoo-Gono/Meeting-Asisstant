@@ -15,7 +15,11 @@ import {
 } from "@workspace/api-zod";
 import { extractText, extractTextFromBuffer, type MaterialType } from "../lib/extractor";
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
+import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
+
+/** Material types delivered via Supabase Storage (Cloudinary blocks raw delivery). */
+const STORAGE_TYPES = new Set<string>(["pdf", "excel"]);
 
 const router: IRouter = Router();
 
@@ -137,16 +141,20 @@ router.post(
     const materialType = rawType as MaterialType;
     const rawContextNote = req.body?.contextNote as string | undefined;
 
-    // Upload file buffer to Cloudinary, preserving the original file extension
-    // so browsers can identify the file type from the URL (e.g. .pdf, .xlsx)
-    let cloudinaryUrl: string;
+    // Route upload: PDF/Excel → Supabase Storage (Cloudinary blocks raw delivery);
+    // images/audio → Cloudinary (those resource types deliver fine).
+    let storedUrl: string;
     try {
-      const resourceType = getResourceType(materialType);
-      const ext = path.extname(req.file.originalname).slice(1).toLowerCase(); // e.g. "pdf"
-      const { secure_url } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
-      cloudinaryUrl = secure_url;
+      if (STORAGE_TYPES.has(materialType)) {
+        storedUrl = await uploadToStorage(req.file.buffer, req.file.originalname);
+      } else {
+        const resourceType = getResourceType(materialType);
+        const ext = path.extname(req.file.originalname).slice(1).toLowerCase();
+        const { secure_url } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
+        storedUrl = secure_url;
+      }
     } catch (uploadErr) {
-      logger.error({ uploadErr }, "Cloudinary upload failed");
+      logger.error({ uploadErr }, "File upload failed");
       res.status(500).json({ error: "Failed to upload file to storage" });
       return;
     }
@@ -156,7 +164,7 @@ router.post(
       .insert({
         meeting_id: params.data.meetingId,
         type: materialType,
-        filename: cloudinaryUrl,          // full Cloudinary URL
+        filename: storedUrl,              // Supabase Storage or Cloudinary URL
         original_name: req.file.originalname,
         extracted_text: null,
         context_note: rawContextNote?.trim() || null,
@@ -245,6 +253,75 @@ router.post(
   },
 );
 
+// GET /materials/:materialId/file — proxy download for Cloudinary assets.
+// Cloudinary raw resources (pdf, excel, audio) block unauthenticated browser
+// access. This route generates a signed, time-limited URL and streams the
+// file back with correct Content-Type so the browser can open/display it.
+router.get(
+  "/materials/:materialId/file",
+  async (req, res): Promise<void> => {
+    const materialId = parseInt(req.params.materialId, 10);
+    if (isNaN(materialId)) { res.status(400).json({ error: "Invalid material id" }); return; }
+
+    const { data: material } = await supabase
+      .from("materials")
+      .select("id, filename, type, original_name")
+      .eq("id", materialId)
+      .single();
+
+    if (!material || !material.filename) { res.status(404).json({ error: "Material not found" }); return; }
+
+    if (isStorageUrl(material.filename)) {
+      // Replit Object Storage (GCS) — download server-side and stream to client
+      try {
+        const { buffer, contentType } = await downloadFromStorage(material.filename);
+        res.setHeader("Content-Type", contentType);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${encodeURIComponent(material.original_name ?? "file")}"`,
+        );
+        res.end(buffer);
+      } catch (err) {
+        logger.error({ err, materialId }, "GCS storage download error");
+        res.status(500).json({ error: "Failed to fetch file from storage" });
+      }
+      return;
+    }
+
+    if (!material.filename.startsWith("http")) {
+      // Legacy local file — serve directly from disk
+      const filePath = path.join(UPLOADS_DIR, material.filename);
+      if (!fs.existsSync(filePath)) { res.status(404).json({ error: "File not found on disk" }); return; }
+      res.sendFile(filePath);
+      return;
+    }
+
+    // Cloudinary asset (image / audio) — fetch server-side and stream to client.
+    // Raw types (pdf, excel) now use Replit Object Storage, so only image/audio reach here.
+    try {
+      const upstream = await fetch(material.filename);
+      if (!upstream.ok) {
+        logger.warn({ materialId, status: upstream.status }, "Cloudinary proxy fetch failed");
+        res.status(502).json({ error: "Failed to fetch file from storage" });
+        return;
+      }
+      const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
+      const contentLength = upstream.headers.get("content-length");
+      res.setHeader("Content-Type", contentType);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${encodeURIComponent(material.original_name ?? "file")}"`,
+      );
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      const buffer = Buffer.from(await upstream.arrayBuffer());
+      res.end(buffer);
+    } catch (err) {
+      logger.error({ err, materialId }, "Cloudinary proxy error");
+      res.status(500).json({ error: "Internal error fetching file" });
+    }
+  },
+);
+
 // DELETE /projects/:projectId/meetings/:meetingId/materials/:materialId
 router.delete(
   "/projects/:projectId/meetings/:meetingId/materials/:materialId",
@@ -267,8 +344,13 @@ router.delete(
 
     // Clean up the stored file (async, non-blocking)
     if (deleted.filename) {
-      if (deleted.filename.startsWith("http")) {
-        // New Cloudinary-backed material
+      if (isStorageUrl(deleted.filename)) {
+        // Supabase Storage-backed material
+        deleteFromStorage(deleted.filename).catch((err) =>
+          logger.warn({ err, materialId: deleted.id }, "Failed to delete Supabase Storage asset"),
+        );
+      } else if (deleted.filename.startsWith("http")) {
+        // Cloudinary-backed material (image / audio)
         deleteFromUrl(deleted.filename).catch((err) =>
           logger.warn({ err, materialId: deleted.id }, "Failed to delete Cloudinary asset"),
         );

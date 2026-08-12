@@ -323,29 +323,21 @@ function MaterialCard({
   const [showText, setShowText] = useState(false);
 
   const hasFile = material.type !== 'text' && material.filename;
-  // New uploads store a full Cloudinary URL; legacy entries have a short filename served from /api/files/
+  // Cloudinary raw resources (pdf, excel, audio) cannot be opened directly in
+  // the browser — Cloudinary blocks unauthenticated access.  Route all file
+  // opens through our API proxy which generates a signed, time-limited URL.
+  // Legacy short names are still served from /api/files/.
   const fileUrl = hasFile
     ? material.filename.startsWith('http')
-      ? material.filename
+      ? `/api/materials/${material.id}/file`
       : `/api/files/${material.filename}`
     : null;
 
-  // Open file in a new tab.
-  // For Cloudinary URLs (https://...) we open directly — no fetch needed.
-  // For legacy local /api/files/ paths we fetch a blob first so the service
-  // worker doesn't intercept the navigation; we omit "noopener" on the
-  // synchronous window.open so the returned reference stays non-null.
+  // Open file in a new tab via blob fetch so the service worker doesn't
+  // intercept the navigation. We omit "noopener" so we keep the window ref.
   const handleOpen = async () => {
     if (!fileUrl) return;
-
-    // Cloudinary or any absolute URL: open directly
-    if (fileUrl.startsWith('http')) {
-      window.open(fileUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    // Legacy local file: fetch as blob then navigate the pre-opened window
-    const win = window.open('', '_blank'); // no "noopener" — we need the reference
+    const win = window.open('', '_blank');
     try {
       const res = await fetch(fileUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -356,10 +348,7 @@ function MaterialCard({
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
       }
     } catch {
-      // Fetch failed — navigate to the direct URL as fallback
-      if (win) {
-        win.location.href = fileUrl;
-      }
+      if (win) win.location.href = fileUrl;
     }
   };
 

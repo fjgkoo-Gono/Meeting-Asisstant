@@ -1,3 +1,4 @@
+import path from "path";
 import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({
@@ -56,6 +57,23 @@ export function extractPublicId(url: string): string | null {
   // Pattern: .../upload/[v{digits}/]{public_id}.{ext}
   const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^./]+)?$/);
   return match ? match[1] : null;
+}
+
+/**
+ * Generate a signed, time-limited download URL for a Cloudinary asset.
+ * Raw resources (pdf, excel) block direct browser access; this URL includes
+ * the API signature so Cloudinary serves the file without extra auth.
+ * Defaults to a 1-hour expiry.
+ */
+export function generateDownloadUrl(fileUrl: string, expiresInSec = 3600): string {
+  const publicId = extractPublicId(fileUrl);
+  if (!publicId) return fileUrl;
+  const resourceType = resourceTypeFromUrl(fileUrl);
+  const ext = path.extname(new URL(fileUrl).pathname).slice(1); // e.g. "pdf"
+  return cloudinary.utils.private_download_url(publicId, ext, {
+    resource_type: resourceType,
+    expires_at: Math.floor(Date.now() / 1000) + expiresInSec,
+  } as Parameters<typeof cloudinary.utils.private_download_url>[2]);
 }
 
 /**

@@ -178,10 +178,12 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
         : 'Failed';
 
   const hasFile = material.type !== 'text' && material.filename;
-  // New uploads store a full Cloudinary URL; legacy entries have a short name served via /api/files/
+  // Cloudinary raw resources (pdf, excel, audio) block direct browser access.
+  // Route through the API proxy which generates a signed, time-limited URL.
+  // Legacy short names are still served from /api/files/.
   const fileUrl = hasFile
     ? material.filename.startsWith('http')
-      ? material.filename
+      ? `${getBaseUrl()}/api/materials/${material.id}/file`
       : `${getBaseUrl()}/api/files/${material.filename}`
     : null;
   const hasText =
