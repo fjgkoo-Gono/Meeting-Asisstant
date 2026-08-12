@@ -35,7 +35,7 @@ function resolveFileRef(filename: string): string {
 // Use memory storage — files go to Cloudinary, not local disk
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB to accommodate large audio files
 });
 
 const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel", "audio"];
