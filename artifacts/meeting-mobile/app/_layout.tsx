@@ -13,6 +13,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { Feather } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
+import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
 
@@ -58,6 +59,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
+      // TEMP DIAGNOSTIC — remove after icon issue is resolved
+      console.log('[FontDebug] fontsLoaded:', fontsLoaded, 'fontError:', fontError?.message ?? null);
+      console.log('[FontDebug] Font.isLoaded(feather):', Font.isLoaded('feather'));
+      console.log('[FontDebug] loaded fonts:', Font.getLoadedFonts?.() ?? 'getLoadedFonts unavailable');
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
