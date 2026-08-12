@@ -2,3 +2,4 @@
 - [Orval Zod Integer Issue](orval-zod-integer.md) — Orval v8 generates zod.int() (Zod v4 API) for `type: integer`; use `type: number` in OpenAPI spec to get zod.number() instead.
 - [Supabase JS Client in api-server](supabase-js-client.md) — api-server uses @supabase/supabase-js (not Drizzle); SUPABASE_URL path-stripping quirk + RLS must be disabled on all 4 tables.
 - [Cloudinary raw → Replit Object Storage](cloudinary-raw-gcs-storage.md) — Cloudinary blocks raw delivery; use GCS for PDF/Excel.
+- [Feather font loading](feather-font-loading.md) — NEVER remove the `feather: require(...)` line from meeting-mobile _layout.tsx useFonts; icons break silently on native only.
