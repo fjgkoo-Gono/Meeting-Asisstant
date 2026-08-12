@@ -127,8 +127,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        proxyTimeout: 300_000, // 5 min — large audio uploads can take a while
-        timeout: 300_000,
       },
     },
   },
