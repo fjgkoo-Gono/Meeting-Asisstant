@@ -180,11 +180,9 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
   const hasFile = material.type !== 'text' && material.filename;
   // Cloudinary raw resources (pdf, excel, audio) block direct browser access.
   // Route through the API proxy which generates a signed, time-limited URL.
-  // Legacy short names are still served from /api/files/.
+  // All file types (GCS, Cloudinary, legacy disk) are served through the proxy route.
   const fileUrl = hasFile
-    ? material.filename.startsWith('http')
-      ? `${getBaseUrl()}/api/materials/${material.id}/file`
-      : `${getBaseUrl()}/api/files/${material.filename}`
+    ? `${getBaseUrl()}/api/materials/${material.id}/file`
     : null;
   const hasText =
     (material.type === 'text' || (material.type === 'audio' && material.status === 'ready')) &&
