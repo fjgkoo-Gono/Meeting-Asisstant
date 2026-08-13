@@ -108,12 +108,40 @@ async function transcribeWithGladia(audioUrl: string, apiKey: string): Promise<s
 }
 
 /**
- * Transcribe an audio file at the given public URL using Gladia.
- * Reads GLADIA_API_KEY from the environment.
+ * Upload an audio buffer to Gladia's /v2/upload endpoint and return
+ * the audio_url Gladia assigns. Using Gladia-hosted URLs avoids any
+ * authentication issues with third-party storage (e.g. Cloudinary).
  */
-export async function transcribeAudio(audioUrl: string): Promise<string> {
+async function uploadBufferToGladia(buffer: Buffer, filename: string, apiKey: string): Promise<string> {
+  const form = new FormData();
+  // Blob requires a BlobPart; convert Buffer to Uint8Array for type compatibility.
+  form.append("audio", new Blob([new Uint8Array(buffer)]), filename);
+
+  const uploadRes = await fetch("https://api.gladia.io/v2/upload", {
+    method: "POST",
+    headers: { "x-gladia-key": apiKey },
+    body: form,
+  });
+
+  if (!uploadRes.ok) {
+    const errBody = await uploadRes.text();
+    throw new Error(`Gladia upload error ${uploadRes.status}: ${errBody}`);
+  }
+
+  const { audio_url } = (await uploadRes.json()) as { audio_url?: string };
+  if (!audio_url) throw new Error("Gladia upload did not return an audio_url");
+  return audio_url;
+}
+
+/**
+ * Upload an audio buffer to Gladia and transcribe it with diarization.
+ * This is the preferred entry-point: it avoids relying on the audio file
+ * being publicly accessible at a third-party URL.
+ */
+export async function transcribeAudioBuffer(buffer: Buffer, filename: string): Promise<string> {
   const apiKey = process.env.GLADIA_API_KEY;
   if (!apiKey) throw new Error("GLADIA_API_KEY is not configured");
+  const audioUrl = await uploadBufferToGladia(buffer, filename, apiKey);
   return transcribeWithGladia(audioUrl, apiKey);
 }
 
@@ -150,14 +178,25 @@ export async function extractText(
   fileRef: string,
   type: MaterialType,
 ): Promise<string> {
-  // Audio is transcribed via Gladia using the remote URL directly — no local download.
+  // Audio: download to buffer and upload directly to Gladia.
+  // This avoids any URL-authentication issues with third-party storage.
   if (type === "audio") {
-    if (!fileRef.startsWith("http")) {
-      throw new Error(
-        "Audio transcription requires a remote storage URL. Legacy local audio files are not supported — please re-upload the file.",
-      );
+    let audioBuffer: Buffer;
+    let audioFilename: string;
+
+    if (fileRef.startsWith("http")) {
+      const dlRes = await fetch(fileRef);
+      if (!dlRes.ok) {
+        throw new Error(`Failed to fetch audio for transcription (${dlRes.status}): ${fileRef}`);
+      }
+      audioBuffer = Buffer.from(await dlRes.arrayBuffer());
+      audioFilename = path.basename(new URL(fileRef).pathname) || "audio.mp3";
+    } else {
+      audioBuffer = fs.readFileSync(fileRef);
+      audioFilename = path.basename(fileRef) || "audio.mp3";
     }
-    return await transcribeAudio(fileRef);
+
+    return await transcribeAudioBuffer(audioBuffer, audioFilename);
   }
 
   // Resolve remote URL → local temp file so all cases below can read from disk
