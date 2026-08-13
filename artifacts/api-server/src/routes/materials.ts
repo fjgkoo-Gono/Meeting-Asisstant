@@ -21,8 +21,12 @@ import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary"
 import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
 
-/** Material types delivered via Supabase Storage (Cloudinary blocks raw delivery). */
-const STORAGE_TYPES = new Set<string>(["pdf", "excel", "pptx"]);
+/**
+ * Material types routed to Replit Object Storage (GCS).
+ * Cloudinary blocks raw delivery for PDF/Excel so those go here instead.
+ * PPTX goes to Cloudinary as resource_type:"image" for slide-to-image conversion.
+ */
+const STORAGE_TYPES = new Set<string>(["pdf", "excel"]);
 
 const router: IRouter = Router();
 
@@ -144,8 +148,9 @@ router.post(
     const materialType = rawType as MaterialType;
     const rawContextNote = req.body?.contextNote as string | undefined;
 
-    // Route upload: PDF/Excel → Supabase Storage (Cloudinary blocks raw delivery);
-    // images/audio → Cloudinary (those resource types deliver fine).
+    // Route upload: PDF/Excel → Replit Object Storage (Cloudinary blocks raw delivery);
+    // PPTX → Cloudinary as resource_type:"image" (enables per-slide image extraction);
+    // images/audio → Cloudinary as their native resource types.
     let storedUrl: string;
     try {
       if (STORAGE_TYPES.has(materialType)) {
@@ -153,8 +158,12 @@ router.post(
       } else {
         const resourceType = getResourceType(materialType);
         const ext = path.extname(req.file.originalname).slice(1).toLowerCase();
-        const { secure_url } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
-        storedUrl = secure_url;
+        const { secure_url, pages } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
+        // For PPTX: encode the slide count in the stored URL as a fragment (#pages=N)
+        // so the extractor knows how many slides to process without an extra API call.
+        storedUrl = (materialType === "pptx" && pages && pages > 0)
+          ? `${secure_url}#pages=${pages}`
+          : secure_url;
       }
     } catch (uploadErr) {
       logger.error({ uploadErr }, "File upload failed");
@@ -181,15 +190,23 @@ router.post(
 
     // Async extraction after response.
     // Audio: upload the in-memory buffer directly to Gladia (avoids Cloudinary URL auth issues).
+    // PPTX: extraction requires the Cloudinary URL (with #pages=N) to fetch slide images;
+    //        the in-memory buffer is not useful here, so we use the stored URL directly.
     // Everything else: use the in-memory buffer to avoid re-downloading.
     const materialId = data.id;
     const uploadedBuffer = req.file.buffer;
     const originalName = req.file.originalname;
+    const storedUrlForExtraction = storedUrl; // captured for async closure
     setImmediate(async () => {
       try {
-        const text = materialType === "audio"
-          ? await transcribeAudioBuffer(uploadedBuffer, originalName)
-          : await extractTextFromBuffer(uploadedBuffer, materialType, originalName);
+        let text: string;
+        if (materialType === "audio") {
+          text = await transcribeAudioBuffer(uploadedBuffer, originalName);
+        } else if (materialType === "pptx") {
+          text = await extractText(storedUrlForExtraction, materialType);
+        } else {
+          text = await extractTextFromBuffer(uploadedBuffer, materialType, originalName);
+        }
         await supabase
           .from("materials")
           .update({ extracted_text: text, status: "ready" })

@@ -1,6 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { buildSlideImageUrl } from "./cloudinary";
 
 /**
  * If `fileRef` is a URL (Cloudinary or otherwise), download it to a temporary
@@ -167,16 +168,102 @@ export async function extractTextFromBuffer(
   }
 }
 
+/** Maximum slides to process per PPTX (caps Claude Vision API cost). */
+const MAX_PPTX_SLIDES = 50;
+
+/**
+ * Fetch each slide of a multi-page PPTX from Cloudinary and extract text
+ * via Claude Vision. Each slide is retrieved as a JPEG image using the
+ * `pg_N` Cloudinary transformation, then sent to the Anthropic Messages API.
+ */
+async function extractPptxViaVision(baseUrl: string, pageCount: number): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+
+  const slideCount = Math.min(pageCount, MAX_PPTX_SLIDES);
+  const slideTexts: string[] = [];
+
+  for (let page = 1; page <= slideCount; page++) {
+    const slideUrl = buildSlideImageUrl(baseUrl, page);
+    const imgRes = await fetch(slideUrl);
+    if (!imgRes.ok) {
+      // Cloudinary returns 404 when the page index exceeds the actual slide count
+      if (imgRes.status === 404) break;
+      throw new Error(`Failed to fetch slide ${page} from Cloudinary (${imgRes.status}): ${slideUrl}`);
+    }
+    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const base64 = imgBuffer.toString("base64");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-opus-4-5",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/jpeg", data: base64 },
+              },
+              {
+                type: "text",
+                text: "Extrae todo el texto y contenido visible de esta diapositiva de presentación. Incluye títulos, viñetas, datos de tablas y gráficos, y cualquier texto en formas o cuadros de texto. Responde solo con el contenido extraído, sin comentarios adicionales.",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`Anthropic Vision error on slide ${page} (${response.status}): ${errBody}`);
+    }
+
+    const data = (await response.json()) as {
+      content: Array<{ type: string; text?: string }>;
+    };
+    const textBlock = data.content.find((b) => b.type === "text");
+    if (textBlock?.text?.trim()) {
+      slideTexts.push(`--- Slide ${page} ---\n${textBlock.text.trim()}`);
+    }
+  }
+
+  return slideTexts.join("\n\n").trim();
+}
+
 /**
  * Extract plain text from an uploaded material.
  * `fileRef` may be a local filesystem path (legacy) or a remote HTTPS URL.
  * When it is a URL the file is downloaded to a temporary location first,
- * except for audio which is sent directly to Gladia by URL.
+ * except for audio (sent to Gladia) and PPTX (fetched slide-by-slide from Cloudinary).
  */
 export async function extractText(
   fileRef: string,
   type: MaterialType,
 ): Promise<string> {
+  // PPTX: fetch slide images from Cloudinary and process via Claude Vision.
+  // The stored URL encodes the slide count as a fragment: url#pages=N.
+  // No local download needed.
+  if (type === "pptx") {
+    if (!fileRef.startsWith("http")) {
+      throw new Error(
+        "PPTX extraction requires a Cloudinary URL. Re-upload the file to generate one.",
+      );
+    }
+    const [baseUrl, fragment] = fileRef.split("#");
+    const pagesMatch = fragment?.match(/pages=(\d+)/);
+    const pageCount = pagesMatch ? parseInt(pagesMatch[1], 10) : 1;
+    return await extractPptxViaVision(baseUrl, pageCount);
+  }
+
   // Audio: download to buffer and upload directly to Gladia.
   // This avoids any URL-authentication issues with third-party storage.
   if (type === "audio") {
@@ -236,25 +323,6 @@ export async function extractText(
           if (csv.trim()) texts.push(`Sheet: ${sheetName}\n${csv}`);
         }
         return texts.join("\n\n").trim();
-      }
-
-      case "pptx": {
-        // PPTX is a ZIP archive. Extract all slide XMLs and pull text from <a:t> elements.
-        const { exec } = await import("child_process");
-        const { promisify } = await import("util");
-        const execAsync = promisify(exec);
-        const safePath = localPath.replace(/'/g, "'\\''");
-        const { stdout } = await execAsync(
-          `unzip -p '${safePath}' 'ppt/slides/slide*.xml' 2>/dev/null || true`,
-          { maxBuffer: 20 * 1024 * 1024 }
-        );
-        // Extract text content between <a:t> tags
-        const texts: string[] = [];
-        for (const m of stdout.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)) {
-          const t = m[1].trim();
-          if (t) texts.push(t);
-        }
-        return texts.join(" ").trim();
       }
 
       case "photo":
