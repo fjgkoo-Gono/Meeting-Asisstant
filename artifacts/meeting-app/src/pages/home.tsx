@@ -2,8 +2,9 @@ import { useListProjects, useCreateProject, useDeleteProject } from '@workspace/
 import { useQueryClient } from '@tanstack/react-query';
 import { getListProjectsQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import { Plus, Folder, ChevronRight, Search, Trash2 } from 'lucide-react';
+import { Plus, Folder, ChevronRight, Search, Trash2, Sun, Moon } from 'lucide-react';
 import { useState } from 'react';
+import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -20,6 +21,7 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const filteredProjects = projects?.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -30,7 +32,16 @@ export default function Home() {
     <div className="flex-1 flex flex-col pt-safe px-4 py-6 max-w-md mx-auto w-full">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-serif font-bold text-foreground">Projects</h1>
-        <NewProjectDialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
+          <NewProjectDialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen} />
+        </div>
       </div>
 
       <div className="relative mb-6">
