@@ -343,16 +343,18 @@ function SpeakerNameEditor({
   material: Material;
   projectId: number;
   meetingId: number;
-  onSaved: () => void;
+  /** Called with the saved names so the parent can update display immediately. */
+  onSaved: (savedNames: Record<string, string>) => void;
 }) {
   const speakers = parseDetectedSpeakers(material.extractedText ?? '');
   const [names, setNames] = useState<Record<string, string>>(() => {
-    const map = material.speakerMap ?? {};
+    const map = (material.speakerMap ?? {}) as Record<string, string>;
     const result: Record<string, string> = {};
-    for (const n of speakers) result[n] = (map as Record<string, string>)[n] ?? '';
+    for (const n of speakers) result[n] = map[n] ?? '';
     return result;
   });
   const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
 
   if (speakers.length === 0) return null;
 
@@ -360,8 +362,9 @@ function SpeakerNameEditor({
     setSaving(true);
     try {
       await updateMaterialSpeakers(projectId, meetingId, material.id, { speakerMap: names });
-      onSaved();
+      onSaved(names);
       toast.success('Nombres guardados');
+      setOpen(false);
     } catch {
       toast.error('Error al guardar los nombres');
     } finally {
@@ -369,34 +372,48 @@ function SpeakerNameEditor({
     }
   };
 
+  // Check if any speaker already has a real name saved
+  const savedMap = (material.speakerMap ?? {}) as Record<string, string>;
+  const hasSavedNames = speakers.some(n => savedMap[n]?.trim());
+
   return (
     <div className="px-4 pb-3 border-t border-border/50 pt-3">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-        Hablantes detectados
-      </p>
-      <div className="flex flex-col gap-1.5 mb-3">
-        {speakers.map(num => (
-          <div key={num} className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground w-20 shrink-0">Speaker {num}</span>
-            <input
-              className="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="Nombre real (opcional)"
-              value={names[num] ?? ''}
-              onChange={e => setNames(prev => ({ ...prev, [num]: e.target.value }))}
-            />
-          </div>
-        ))}
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full rounded-xl h-7 text-xs"
-        disabled={saving}
-        onClick={handleSave}
+      <button
+        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors mb-2"
+        onClick={() => setOpen(v => !v)}
       >
-        {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-        Guardar nombres
-      </Button>
+        <Mic className="h-3 w-3" />
+        {hasSavedNames ? 'Editar nombres de hablantes' : 'Asignar nombres a hablantes'}
+        {open ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+      </button>
+
+      {open && (
+        <>
+          <div className="flex flex-col gap-1.5 mb-3">
+            {speakers.map(num => (
+              <div key={num} className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground w-20 shrink-0">Speaker {num}</span>
+                <input
+                  className="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Nombre real (opcional)"
+                  value={names[num] ?? ''}
+                  onChange={e => setNames(prev => ({ ...prev, [num]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full rounded-xl h-7 text-xs"
+            disabled={saving}
+            onClick={handleSave}
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Guardar nombres
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -418,13 +435,12 @@ function MaterialCard({
 }) {
   const Ic = TYPE_ICON[material.type] ?? Paperclip;
   const [showText, setShowText] = useState(false);
+  // Optimistic speaker map: updated immediately after save without waiting for refetch
+  const [localSpeakerMap, setLocalSpeakerMap] = useState<Record<string, string> | null>(null);
 
   const hasFile = material.type !== 'text' && material.filename;
-  // All file types go through the API proxy route (handles Cloudinary, GCS, and legacy disk).
   const fileUrl = hasFile ? `/api/materials/${material.id}/file` : null;
 
-  // Open file in a new tab via blob fetch so the service worker doesn't
-  // intercept the navigation.
   const handleOpen = async () => {
     if (!fileUrl) return;
     const win = window.open('', '_blank');
@@ -443,9 +459,21 @@ function MaterialCard({
   };
 
   const isAudio = material.type === 'audio';
+  // Use localSpeakerMap (optimistic) if set, otherwise fall back to server data
+  const activeSpeakerMap = localSpeakerMap ?? (material.speakerMap as Record<string, string> | null);
   const displayText = isAudio && material.extractedText
-    ? applySpeakerMap(material.extractedText, material.speakerMap as Record<string, string> | null)
+    ? applySpeakerMap(material.extractedText, activeSpeakerMap)
     : material.extractedText;
+
+  // After a save, update local map and trigger background refetch
+  const handleSpeakersSaved = (savedNames: Record<string, string>) => {
+    setLocalSpeakerMap(savedNames);
+    onRefresh();
+  };
+
+  const canExpand = (material.type === 'text' || (isAudio && material.status === 'ready')) && material.extractedText;
+  // For audio, show the speaker editor section whenever status is ready (even without extractedText yet)
+  const showSpeakerEditor = isAudio && material.status === 'ready';
 
   return (
     <div className="flex flex-col bg-muted/30 border border-border rounded-2xl overflow-hidden">
@@ -460,7 +488,6 @@ function MaterialCard({
 
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
-          {/* View / open */}
           {hasFile && (
             <button
               onClick={handleOpen}
@@ -471,8 +498,7 @@ function MaterialCard({
             </button>
           )}
 
-          {/* Expand text / transcript */}
-          {(material.type === 'text' || (isAudio && material.status === 'ready')) && material.extractedText && (
+          {canExpand && (
             <button
               onClick={() => setShowText(v => !v)}
               className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
@@ -482,7 +508,6 @@ function MaterialCard({
             </button>
           )}
 
-          {/* Retry */}
           {material.status === 'error' && (
             <button
               onClick={() => onRetry(material.id)}
@@ -503,29 +528,26 @@ function MaterialCard({
         </div>
       )}
 
-      {/* Expanded section */}
-      {showText && displayText && (
-        <>
-          {/* Speaker name editor (audio only) */}
-          {isAudio && (
-            <SpeakerNameEditor
-              material={material}
-              projectId={projectId}
-              meetingId={meetingId}
-              onSaved={onRefresh}
-            />
-          )}
+      {/* Speaker name editor — always visible for ready audio, not inside the transcript toggle */}
+      {showSpeakerEditor && (
+        <SpeakerNameEditor
+          material={{ ...material, speakerMap: activeSpeakerMap }}
+          projectId={projectId}
+          meetingId={meetingId}
+          onSaved={handleSpeakersSaved}
+        />
+      )}
 
-          {/* Transcript / text */}
-          <div className="px-4 pb-4 border-t border-border/50 pt-3">
-            {isAudio && (
-              <p className="text-xs font-medium text-muted-foreground mb-2">Transcripción</p>
-            )}
-            <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
-              {displayText}
-            </p>
-          </div>
-        </>
+      {/* Expanded transcript / text */}
+      {showText && displayText && (
+        <div className="px-4 pb-4 border-t border-border/50 pt-3">
+          {isAudio && (
+            <p className="text-xs font-medium text-muted-foreground mb-2">Transcripción</p>
+          )}
+          <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+            {displayText}
+          </p>
+        </div>
       )}
     </div>
   );

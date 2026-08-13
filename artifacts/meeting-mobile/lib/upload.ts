@@ -14,7 +14,7 @@ export async function uploadDocumentMaterial(
   uri: string,
   fileName: string,
   mimeType: string,
-  materialType: 'pdf' | 'excel',
+  materialType: 'pdf' | 'excel' | 'audio',
   contextNote?: string,
 ): Promise<unknown> {
   const baseUrl = getBaseUrl();

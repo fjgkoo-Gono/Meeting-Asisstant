@@ -184,7 +184,7 @@ export default function MeetingDetailScreen() {
     uri: string;
     fileName: string;
     mimeType: string;
-    type: 'photo' | 'image' | 'pdf' | 'excel';
+    type: 'photo' | 'image' | 'pdf' | 'excel' | 'audio';
   };
   const [pendingUpload, setPendingUpload] = useState<PendingUploadData | null>(null);
   const [contextNoteInput, setContextNoteInput] = useState('');
