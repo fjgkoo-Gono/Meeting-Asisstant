@@ -13,7 +13,7 @@ import {
   RetryMaterialResponse,
   DeleteMaterialParams,
 } from "@workspace/api-zod";
-import { extractText, extractTextFromBuffer, type MaterialType } from "../lib/extractor";
+import { extractText, extractTextFromBuffer, transcribeAudio, type MaterialType } from "../lib/extractor";
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
 import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
@@ -176,14 +176,17 @@ router.post(
 
     res.status(201).json(CreateMaterialResponse.parse(toCamel(data)));
 
-    // Async extraction after response — use the in-memory buffer directly to
-    // avoid re-downloading from Cloudinary (raw resources return 401 on fetch).
+    // Async extraction after response.
+    // Audio: pass the Cloudinary URL directly to Gladia (no buffer needed).
+    // Everything else: use the in-memory buffer to avoid re-downloading.
     const materialId = data.id;
     const uploadedBuffer = req.file.buffer;
     const originalName = req.file.originalname;
     setImmediate(async () => {
       try {
-        const text = await extractTextFromBuffer(uploadedBuffer, materialType, originalName);
+        const text = materialType === "audio"
+          ? await transcribeAudio(storedUrl)
+          : await extractTextFromBuffer(uploadedBuffer, materialType, originalName);
         await supabase
           .from("materials")
           .update({ extracted_text: text, status: "ready" })
