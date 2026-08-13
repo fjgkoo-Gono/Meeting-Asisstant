@@ -14,6 +14,7 @@ export const MaterialType = {
   image: 'image',
   pdf: 'pdf',
   excel: 'excel',
+  pptx: 'pptx',
   text: 'text',
   audio: 'audio',
 } as const;

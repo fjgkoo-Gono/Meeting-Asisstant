@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ChevronUp,
   Mic,
+  Presentation,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -65,7 +66,7 @@ function parseDetectedSpeakers(text: string): string[] {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-type FileMaterialType = Extract<MaterialType, 'photo' | 'image' | 'pdf' | 'excel' | 'audio'>;
+type FileMaterialType = Extract<MaterialType, 'photo' | 'image' | 'pdf' | 'excel' | 'pptx' | 'audio'>;
 
 const FILE_TYPE_CONFIG: Record<
   FileMaterialType,
@@ -80,6 +81,11 @@ const FILE_TYPE_CONFIG: Record<
     accept:
       '.xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv',
   },
+  pptx: {
+    label: 'PowerPoint',
+    icon: Presentation,
+    accept: '.pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint',
+  },
   audio: {
     label: 'Audio',
     icon: Mic,
@@ -92,6 +98,7 @@ const TYPE_ICON: Record<MaterialType, React.ElementType> = {
   image: ImageIcon,
   pdf: FileText,
   excel: Table2,
+  pptx: Presentation,
   text: AlignLeft,
   audio: Mic,
 };

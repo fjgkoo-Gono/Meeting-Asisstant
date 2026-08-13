@@ -18,7 +18,7 @@ async function downloadToTemp(fileRef: string, ext: string): Promise<string> {
   return tmpPath;
 }
 
-export type MaterialType = "photo" | "image" | "pdf" | "excel" | "text" | "audio";
+export type MaterialType = "photo" | "image" | "pdf" | "excel" | "pptx" | "text" | "audio";
 
 const IMAGE_MIME_TYPES: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
   ".jpg": "image/jpeg",
@@ -236,6 +236,25 @@ export async function extractText(
           if (csv.trim()) texts.push(`Sheet: ${sheetName}\n${csv}`);
         }
         return texts.join("\n\n").trim();
+      }
+
+      case "pptx": {
+        // PPTX is a ZIP archive. Extract all slide XMLs and pull text from <a:t> elements.
+        const { exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+        const safePath = localPath.replace(/'/g, "'\\''");
+        const { stdout } = await execAsync(
+          `unzip -p '${safePath}' 'ppt/slides/slide*.xml' 2>/dev/null || true`,
+          { maxBuffer: 20 * 1024 * 1024 }
+        );
+        // Extract text content between <a:t> tags
+        const texts: string[] = [];
+        for (const m of stdout.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)) {
+          const t = m[1].trim();
+          if (t) texts.push(t);
+        }
+        return texts.join(" ").trim();
       }
 
       case "photo":

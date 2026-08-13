@@ -207,7 +207,7 @@ export const ListMaterialsParams = zod.object({
 export const ListMaterialsResponseItem = zod.object({
   "id": zod.number(),
   "meetingId": zod.number(),
-  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text', 'audio']),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'pptx', 'text', 'audio']),
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
@@ -237,7 +237,7 @@ export const CreateMaterialBody = zod.object({
 export const CreateMaterialResponse = zod.object({
   "id": zod.number(),
   "meetingId": zod.number(),
-  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text', 'audio']),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'pptx', 'text', 'audio']),
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
@@ -264,7 +264,7 @@ export const UpdateMaterialSpeakersBody = zod.object({
 export const UpdateMaterialSpeakersResponse = zod.object({
   "id": zod.number(),
   "meetingId": zod.number(),
-  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text', 'audio']),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'pptx', 'text', 'audio']),
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
@@ -299,7 +299,7 @@ export const RetryMaterialParams = zod.object({
 export const RetryMaterialResponse = zod.object({
   "id": zod.number(),
   "meetingId": zod.number(),
-  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text', 'audio']),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'pptx', 'text', 'audio']),
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),

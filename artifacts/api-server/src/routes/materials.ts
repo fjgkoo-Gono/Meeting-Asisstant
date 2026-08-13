@@ -22,7 +22,7 @@ import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage }
 import { logger } from "../lib/logger";
 
 /** Material types delivered via Supabase Storage (Cloudinary blocks raw delivery). */
-const STORAGE_TYPES = new Set<string>(["pdf", "excel"]);
+const STORAGE_TYPES = new Set<string>(["pdf", "excel", "pptx"]);
 
 const router: IRouter = Router();
 
@@ -45,7 +45,7 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
 });
 
-const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel", "audio"];
+const FILE_MATERIAL_TYPES: MaterialType[] = ["photo", "image", "pdf", "excel", "pptx", "audio"];
 
 type ResolveError = { ok: false; error: string; status: 404 };
 type ResolveSuccess = { ok: true };

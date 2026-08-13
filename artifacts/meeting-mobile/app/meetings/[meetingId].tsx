@@ -184,7 +184,7 @@ export default function MeetingDetailScreen() {
     uri: string;
     fileName: string;
     mimeType: string;
-    type: 'photo' | 'image' | 'pdf' | 'excel';
+    type: 'photo' | 'image' | 'pdf' | 'excel' | 'pptx';
   };
   const [pendingUpload, setPendingUpload] = useState<PendingUploadData | null>(null);
   const [contextNoteInput, setContextNoteInput] = useState('');
@@ -338,6 +338,8 @@ export default function MeetingDetailScreen() {
           'application/pdf',
           'application/vnd.ms-excel',
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         ],
         copyToCacheDirectory: true,
         multiple: false,
@@ -345,7 +347,13 @@ export default function MeetingDetailScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       const mimeType = asset.mimeType ?? 'application/octet-stream';
-      const materialType = mimeType === 'application/pdf' ? 'pdf' : 'excel';
+      const isPptx =
+        mimeType === 'application/vnd.ms-powerpoint' ||
+        mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+        asset.name.toLowerCase().endsWith('.pptx') ||
+        asset.name.toLowerCase().endsWith('.ppt');
+      const materialType: 'pdf' | 'excel' | 'pptx' =
+        mimeType === 'application/pdf' ? 'pdf' : isPptx ? 'pptx' : 'excel';
       // Store pending upload and show context note modal
       setContextNoteInput('');
       setPendingUpload({
@@ -398,7 +406,7 @@ export default function MeetingDetailScreen() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancelar', 'Tomar foto', 'Elegir de galería', 'Elegir archivo (PDF/Excel)', 'Subir audio', 'Agregar texto'],
+          options: ['Cancelar', 'Tomar foto', 'Elegir de galería', 'Elegir archivo (PDF/Excel/PPT)', 'Subir audio', 'Agregar texto'],
           cancelButtonIndex: 0,
         },
         (idx) => {
@@ -843,7 +851,7 @@ export default function MeetingDetailScreen() {
             {[
               { icon: 'camera' as const, label: 'Tomar foto', onPress: () => { setShowAndroidSheet(false); handleAddPhoto('camera'); } },
               { icon: 'image' as const, label: 'Elegir de galería', onPress: () => { setShowAndroidSheet(false); handleAddPhoto('gallery'); } },
-              { icon: 'file-text' as const, label: 'Elegir archivo (PDF / Excel)', onPress: () => { setShowAndroidSheet(false); handleAddDocument(); } },
+              { icon: 'file-text' as const, label: 'Elegir archivo (PDF / Excel / PPT)', onPress: () => { setShowAndroidSheet(false); handleAddDocument(); } },
               { icon: 'mic' as const, label: 'Subir audio (MP3, M4A, WAV…)', onPress: () => { setShowAndroidSheet(false); handleAddAudio(); } },
               { icon: 'type' as const, label: 'Agregar texto / transcripción', onPress: () => { setShowAndroidSheet(false); setShowTextModal(true); } },
             ].map((item) => (

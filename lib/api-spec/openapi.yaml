@@ -673,7 +673,7 @@ components:
 
     MaterialType:
       type: string
-      enum: [photo, image, pdf, excel, text, audio]
+      enum: [photo, image, pdf, excel, pptx, text, audio]
 
     MaterialStatus:
       type: string
