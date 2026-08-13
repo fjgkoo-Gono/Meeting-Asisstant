@@ -8,17 +8,22 @@ import {
   Linking,
   Modal,
   ScrollView,
+  TextInput,
   Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import type { Material } from '@workspace/api-client-react';
+import { updateMaterialSpeakers } from '@workspace/api-client-react';
 
 interface Props {
   material: Material;
+  projectId: number;
+  meetingId: number;
   onRetry?: () => void;
   onDelete?: () => void;
+  onRefresh?: () => void;
 }
 
 const TYPE_ICONS: Record<string, string> = {
@@ -35,25 +40,173 @@ function getBaseUrl(): string {
   return domain ? `https://${domain}` : '';
 }
 
+// ── Speaker helpers ──────────────────────────────────────────────────────
+
+function applySpeakerMap(text: string, speakerMap: Record<string, string> | null | undefined): string {
+  if (!speakerMap) return text;
+  let result = text;
+  for (const [num, name] of Object.entries(speakerMap)) {
+    if (name.trim()) result = result.replace(new RegExp(`Speaker ${num}:`, 'g'), `${name.trim()}:`);
+  }
+  return result;
+}
+
+function parseDetectedSpeakers(text: string): string[] {
+  const found = new Set<string>();
+  const re = /^Speaker (\d+):/gm;
+  let m;
+  while ((m = re.exec(text)) !== null) found.add(m[1]);
+  return [...found].sort((a, b) => Number(a) - Number(b));
+}
+
+// ── Speaker name editor ──────────────────────────────────────────────────
+
+function SpeakerNameEditor({
+  material,
+  projectId,
+  meetingId,
+  onSaved,
+  colors,
+}: {
+  material: Material;
+  projectId: number;
+  meetingId: number;
+  onSaved: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const speakers = parseDetectedSpeakers(material.extractedText ?? '');
+  const [names, setNames] = useState<Record<string, string>>(() => {
+    const map = (material.speakerMap ?? {}) as Record<string, string>;
+    const result: Record<string, string> = {};
+    for (const n of speakers) result[n] = map[n] ?? '';
+    return result;
+  });
+  const [saving, setSaving] = useState(false);
+
+  if (speakers.length === 0) return null;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateMaterialSpeakers(projectId, meetingId, material.id, { speakerMap: names });
+      onSaved();
+    } catch {
+      // ignore — user can retry
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View style={[editorStyles.container, { borderColor: colors.border }]}>
+      <Text style={[editorStyles.label, { color: colors.mutedForeground }]}>
+        HABLANTES DETECTADOS
+      </Text>
+      {speakers.map(num => (
+        <View key={num} style={editorStyles.row}>
+          <Text style={[editorStyles.speakerLabel, { color: colors.mutedForeground }]}>
+            Speaker {num}
+          </Text>
+          <TextInput
+            style={[
+              editorStyles.input,
+              { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background },
+            ]}
+            placeholder="Nombre real (opcional)"
+            placeholderTextColor={colors.mutedForeground}
+            value={names[num] ?? ''}
+            onChangeText={v => setNames(prev => ({ ...prev, [num]: v }))}
+          />
+        </View>
+      ))}
+      <Pressable
+        onPress={handleSave}
+        disabled={saving}
+        style={({ pressed }) => [
+          editorStyles.saveBtn,
+          { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 },
+        ]}
+      >
+        {saving
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <Text style={editorStyles.saveBtnText}>Guardar nombres</Text>}
+      </Pressable>
+    </View>
+  );
+}
+
+const editorStyles = StyleSheet.create({
+  container: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 10,
+  },
+  label: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    fontWeight: '500' as const,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  speakerLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    width: 72,
+  },
+  input: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  saveBtn: {
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    height: 36,
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+});
+
 // ── Text viewer modal ────────────────────────────────────────────────────
 
 function TextViewerModal({
   visible,
-  title,
-  subtitle,
-  contextNote,
-  content,
+  material,
+  projectId,
+  meetingId,
   onClose,
+  onRefresh,
 }: {
   visible: boolean;
-  title: string;
-  subtitle?: string;
-  contextNote?: string | null;
-  content: string;
+  material: Material;
+  projectId: number;
+  meetingId: number;
   onClose: () => void;
+  onRefresh: () => void;
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const isAudio = material.type === 'audio';
+
+  const displayText = isAudio && material.extractedText
+    ? applySpeakerMap(material.extractedText, material.speakerMap as Record<string, string> | null)
+    : (material.extractedText ?? '');
 
   return (
     <Modal
@@ -69,7 +222,7 @@ function TextViewerModal({
             <Feather name="x" size={22} color={colors.foreground} />
           </Pressable>
           <Text style={[viewerStyles.title, { color: colors.foreground }]} numberOfLines={1}>
-            {title}
+            {material.originalName}
           </Text>
           <View style={{ width: 22 }} />
         </View>
@@ -78,24 +231,35 @@ function TextViewerModal({
           style={viewerStyles.body}
           contentContainerStyle={[viewerStyles.bodyContent, { paddingBottom: insets.bottom + 24 }]}
         >
-          {/* Subtitle label (e.g. "Transcript") */}
-          {subtitle ? (
-            <Text style={[viewerStyles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
+          {/* Subtitle label */}
+          {isAudio ? (
+            <Text style={[viewerStyles.subtitle, { color: colors.mutedForeground }]}>Transcripción</Text>
           ) : null}
 
           {/* Context note badge */}
-          {contextNote ? (
+          {material.contextNote ? (
             <View style={[viewerStyles.contextBadge, { backgroundColor: colors.muted, borderColor: colors.border }]}>
               <Feather name="bookmark" size={13} color={colors.mutedForeground} />
               <Text style={[viewerStyles.contextText, { color: colors.mutedForeground }]}>
-                {contextNote}
+                {material.contextNote}
               </Text>
             </View>
           ) : null}
 
+          {/* Speaker name editor (audio only) */}
+          {isAudio ? (
+            <SpeakerNameEditor
+              material={material}
+              projectId={projectId}
+              meetingId={meetingId}
+              onSaved={() => { onRefresh(); }}
+              colors={colors}
+            />
+          ) : null}
+
           {/* Full text */}
-          <Text style={[viewerStyles.body, { color: colors.foreground }]} selectable>
-            {content}
+          <Text style={[viewerStyles.bodyText, { color: colors.foreground }]} selectable>
+            {displayText}
           </Text>
         </ScrollView>
       </View>
@@ -123,13 +287,16 @@ const viewerStyles = StyleSheet.create({
     marginHorizontal: 12,
   },
   body: {
-    fontSize: 15,
-    lineHeight: 24,
-    fontFamily: 'Inter_400Regular',
+    flex: 1,
   },
   bodyContent: {
     padding: 20,
     gap: 16,
+  },
+  bodyText: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontFamily: 'Inter_400Regular',
   },
   subtitle: {
     fontSize: 12,
@@ -158,7 +325,7 @@ const viewerStyles = StyleSheet.create({
 
 // ── Material card ────────────────────────────────────────────────────────
 
-export function MaterialCard({ material, onRetry, onDelete }: Props) {
+export function MaterialCard({ material, projectId, meetingId, onRetry, onDelete, onRefresh }: Props) {
   const colors = useColors();
   const icon = (TYPE_ICONS[material.type] ?? 'paperclip') as Parameters<typeof Feather>[0]['name'];
   const [showTextViewer, setShowTextViewer] = useState(false);
@@ -178,15 +345,18 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
         : 'Failed';
 
   const hasFile = material.type !== 'text' && material.filename;
-  // Cloudinary raw resources (pdf, excel, audio) block direct browser access.
-  // Route through the API proxy which generates a signed, time-limited URL.
-  // All file types (GCS, Cloudinary, legacy disk) are served through the proxy route.
   const fileUrl = hasFile
     ? `${getBaseUrl()}/api/materials/${material.id}/file`
     : null;
   const hasText =
     (material.type === 'text' || (material.type === 'audio' && material.status === 'ready')) &&
     !!material.extractedText;
+
+  // Display preview with speaker names applied
+  const isAudio = material.type === 'audio';
+  const previewText = isAudio && material.extractedText
+    ? applySpeakerMap(material.extractedText, material.speakerMap as Record<string, string> | null)
+    : material.extractedText;
 
   const handleOpen = () => {
     if (fileUrl) {
@@ -226,10 +396,10 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
               📌 {material.contextNote}
             </Text>
           ) : null}
-          {/* Text preview (first 120 chars) */}
+          {/* Text preview (first 120 chars, with speaker names applied) */}
           {hasText ? (
             <Text style={[styles.preview, { color: colors.mutedForeground }]} numberOfLines={2}>
-              {material.extractedText!.slice(0, 120)}
+              {(previewText ?? '').slice(0, 120)}
             </Text>
           ) : null}
         </View>
@@ -293,11 +463,11 @@ export function MaterialCard({ material, onRetry, onDelete }: Props) {
       {hasText ? (
         <TextViewerModal
           visible={showTextViewer}
-          title={material.originalName}
-          subtitle={material.type === 'audio' ? 'Transcript' : undefined}
-          contextNote={material.contextNote}
-          content={material.extractedText!}
+          material={material}
+          projectId={projectId}
+          meetingId={meetingId}
           onClose={() => setShowTextViewer(false)}
+          onRefresh={() => { onRefresh?.(); setShowTextViewer(false); }}
         />
       ) : null}
     </>

@@ -108,6 +108,16 @@ export const GetProjectResponse = zod.object({
 
 
 /**
+ * @summary Delete a project by ID
+ */
+export const DeleteProjectParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const DeleteProjectResponse = zod.void()
+
+
+/**
  * @summary Update a project's name or description
  */
 export const UpdateProjectParams = zod.object({
@@ -202,6 +212,7 @@ export const ListMaterialsResponseItem = zod.object({
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
   "contextNote": zod.string().nullish(),
+  "speakerMap": zod.record(zod.string(), zod.string()).nullish(),
   "status": zod.enum(['processing', 'ready', 'error']),
   "createdAt": zod.coerce.date()
 })
@@ -231,6 +242,34 @@ export const CreateMaterialResponse = zod.object({
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
   "contextNote": zod.string().nullish(),
+  "speakerMap": zod.record(zod.string(), zod.string()).nullish(),
+  "status": zod.enum(['processing', 'ready', 'error']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Assign real names to diarized speakers in an audio transcript
+ */
+export const UpdateMaterialSpeakersParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number(),
+  "materialId": zod.coerce.number()
+})
+
+export const UpdateMaterialSpeakersBody = zod.object({
+  "speakerMap": zod.record(zod.string(), zod.string())
+})
+
+export const UpdateMaterialSpeakersResponse = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "type": zod.enum(['photo', 'image', 'pdf', 'excel', 'text', 'audio']),
+  "filename": zod.string(),
+  "originalName": zod.string(),
+  "extractedText": zod.string().nullish(),
+  "contextNote": zod.string().nullish(),
+  "speakerMap": zod.record(zod.string(), zod.string()).nullish(),
   "status": zod.enum(['processing', 'ready', 'error']),
   "createdAt": zod.coerce.date()
 })
@@ -264,6 +303,8 @@ export const RetryMaterialResponse = zod.object({
   "filename": zod.string(),
   "originalName": zod.string(),
   "extractedText": zod.string().nullish(),
+  "contextNote": zod.string().nullish(),
+  "speakerMap": zod.record(zod.string(), zod.string()).nullish(),
   "status": zod.enum(['processing', 'ready', 'error']),
   "createdAt": zod.coerce.date()
 })

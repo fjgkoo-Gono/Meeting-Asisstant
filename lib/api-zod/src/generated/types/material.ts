@@ -5,6 +5,7 @@
  * Meeting Assistant API
  * OpenAPI spec version: 0.1.0
  */
+import type { MaterialSpeakerMap } from './materialSpeakerMap';
 import type { MaterialStatus } from './materialStatus';
 import type { MaterialType } from './materialType';
 
@@ -18,6 +19,8 @@ export interface Material {
   extractedText?: string | null;
   /** @nullable */
   contextNote?: string | null;
+  /** @nullable */
+  speakerMap?: MaterialSpeakerMap;
   status: MaterialStatus;
   createdAt: Date;
 }

@@ -9,6 +9,7 @@ import {
   createMaterial,
   retryMaterial,
   uploadFileMaterial,
+  updateMaterialSpeakers,
 } from '@workspace/api-client-react';
 import type { Material, MaterialType } from '@workspace/api-client-react';
 import { Link, useRoute } from 'wouter';
@@ -41,7 +42,28 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// ── Speaker helpers ───────────────────────────────────────────────────────
+
+/** Replace "Speaker N:" labels with real names from the stored map. */
+function applySpeakerMap(text: string, speakerMap: Record<string, string> | null | undefined): string {
+  if (!speakerMap) return text;
+  let result = text;
+  for (const [num, name] of Object.entries(speakerMap)) {
+    if (name.trim()) result = result.replace(new RegExp(`Speaker ${num}:`, 'g'), `${name.trim()}:`);
+  }
+  return result;
+}
+
+/** Parse the unique speaker numbers found in a Gladia transcript. */
+function parseDetectedSpeakers(text: string): string[] {
+  const found = new Set<string>();
+  const re = /^Speaker (\d+):/gm;
+  let m;
+  while ((m = re.exec(text)) !== null) found.add(m[1]);
+  return [...found].sort((a, b) => Number(a) - Number(b));
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
 
 type FileMaterialType = Extract<MaterialType, 'photo' | 'image' | 'pdf' | 'excel' | 'audio'>;
 
@@ -310,29 +332,99 @@ function AddMaterialSheet({
   );
 }
 
+// ── Speaker name editor ───────────────────────────────────────────────────
+
+function SpeakerNameEditor({
+  material,
+  projectId,
+  meetingId,
+  onSaved,
+}: {
+  material: Material;
+  projectId: number;
+  meetingId: number;
+  onSaved: () => void;
+}) {
+  const speakers = parseDetectedSpeakers(material.extractedText ?? '');
+  const [names, setNames] = useState<Record<string, string>>(() => {
+    const map = material.speakerMap ?? {};
+    const result: Record<string, string> = {};
+    for (const n of speakers) result[n] = (map as Record<string, string>)[n] ?? '';
+    return result;
+  });
+  const [saving, setSaving] = useState(false);
+
+  if (speakers.length === 0) return null;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateMaterialSpeakers(projectId, meetingId, material.id, { speakerMap: names });
+      onSaved();
+      toast.success('Nombres guardados');
+    } catch {
+      toast.error('Error al guardar los nombres');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-3 border-t border-border/50 pt-3">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+        Hablantes detectados
+      </p>
+      <div className="flex flex-col gap-1.5 mb-3">
+        {speakers.map(num => (
+          <div key={num} className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground w-20 shrink-0">Speaker {num}</span>
+            <input
+              className="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Nombre real (opcional)"
+              value={names[num] ?? ''}
+              onChange={e => setNames(prev => ({ ...prev, [num]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full rounded-xl h-7 text-xs"
+        disabled={saving}
+        onClick={handleSave}
+      >
+        {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+        Guardar nombres
+      </Button>
+    </div>
+  );
+}
+
 // ── Material card ─────────────────────────────────────────────────────────
 
 function MaterialCard({
   material,
+  projectId,
+  meetingId,
   onRetry,
+  onRefresh,
 }: {
   material: Material;
+  projectId: number;
+  meetingId: number;
   onRetry: (id: number) => void;
+  onRefresh: () => void;
 }) {
   const Ic = TYPE_ICON[material.type] ?? Paperclip;
   const [showText, setShowText] = useState(false);
 
   const hasFile = material.type !== 'text' && material.filename;
-  // Cloudinary raw resources (pdf, excel, audio) cannot be opened directly in
-  // the browser — Cloudinary blocks unauthenticated access.  Route all file
-  // opens through our API proxy which generates a signed, time-limited URL.
-  // All file types (GCS, Cloudinary, legacy disk) go through the proxy route.
-  const fileUrl = hasFile
-    ? `/api/materials/${material.id}/file`
-    : null;
+  // All file types go through the API proxy route (handles Cloudinary, GCS, and legacy disk).
+  const fileUrl = hasFile ? `/api/materials/${material.id}/file` : null;
 
   // Open file in a new tab via blob fetch so the service worker doesn't
-  // intercept the navigation. We omit "noopener" so we keep the window ref.
+  // intercept the navigation.
   const handleOpen = async () => {
     if (!fileUrl) return;
     const win = window.open('', '_blank');
@@ -349,6 +441,11 @@ function MaterialCard({
       if (win) win.location.href = fileUrl;
     }
   };
+
+  const isAudio = material.type === 'audio';
+  const displayText = isAudio && material.extractedText
+    ? applySpeakerMap(material.extractedText, material.speakerMap as Record<string, string> | null)
+    : material.extractedText;
 
   return (
     <div className="flex flex-col bg-muted/30 border border-border rounded-2xl overflow-hidden">
@@ -375,11 +472,11 @@ function MaterialCard({
           )}
 
           {/* Expand text / transcript */}
-          {(material.type === 'text' || (material.type === 'audio' && material.status === 'ready')) && material.extractedText && (
+          {(material.type === 'text' || (isAudio && material.status === 'ready')) && material.extractedText && (
             <button
               onClick={() => setShowText(v => !v)}
               className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
-              title={material.type === 'audio' ? 'Ver transcripción' : 'Ver contenido'}
+              title={isAudio ? 'Ver transcripción' : 'Ver contenido'}
             >
               {showText ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
@@ -406,16 +503,29 @@ function MaterialCard({
         </div>
       )}
 
-      {/* Expanded text / transcript */}
-      {showText && material.extractedText && (
-        <div className="px-4 pb-4 border-t border-border/50 pt-3">
-          {material.type === 'audio' && (
-            <p className="text-xs font-medium text-muted-foreground mb-2">Transcripción</p>
+      {/* Expanded section */}
+      {showText && displayText && (
+        <>
+          {/* Speaker name editor (audio only) */}
+          {isAudio && (
+            <SpeakerNameEditor
+              material={material}
+              projectId={projectId}
+              meetingId={meetingId}
+              onSaved={onRefresh}
+            />
           )}
-          <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
-            {material.extractedText}
-          </p>
-        </div>
+
+          {/* Transcript / text */}
+          <div className="px-4 pb-4 border-t border-border/50 pt-3">
+            {isAudio && (
+              <p className="text-xs font-medium text-muted-foreground mb-2">Transcripción</p>
+            )}
+            <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+              {displayText}
+            </p>
+          </div>
+        </>
       )}
     </div>
   );
@@ -672,7 +782,14 @@ export default function MeetingDetail() {
                 ) : (
                   <div className="flex flex-col gap-2">
                     {materials.map(m => (
-                      <MaterialCard key={m.id} material={m} onRetry={handleRetry} />
+                      <MaterialCard
+                        key={m.id}
+                        material={m}
+                        projectId={projectId}
+                        meetingId={meetingId}
+                        onRetry={handleRetry}
+                        onRefresh={invalidateMaterials}
+                      />
                     ))}
                   </div>
                 )}

@@ -105,6 +105,11 @@ export const MaterialStatus = {
   error: 'error',
 } as const;
 
+/**
+ * @nullable
+ */
+export type MaterialSpeakerMap = {[key: string]: string} | null;
+
 export interface Material {
   id: number;
   meetingId: number;
@@ -115,8 +120,16 @@ export interface Material {
   extractedText?: string | null;
   /** @nullable */
   contextNote?: string | null;
+  /** @nullable */
+  speakerMap?: MaterialSpeakerMap;
   status: MaterialStatus;
   createdAt: string;
+}
+
+export type SpeakerMapInputSpeakerMap = {[key: string]: string};
+
+export interface SpeakerMapInput {
+  speakerMap: SpeakerMapInputSpeakerMap;
 }
 
 export interface MaterialFileInput {

@@ -12,6 +12,9 @@ import {
   RetryMaterialParams,
   RetryMaterialResponse,
   DeleteMaterialParams,
+  UpdateMaterialSpeakersParams,
+  UpdateMaterialSpeakersBody,
+  UpdateMaterialSpeakersResponse,
 } from "@workspace/api-zod";
 import { extractText, extractTextFromBuffer, transcribeAudioBuffer, type MaterialType } from "../lib/extractor";
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
@@ -322,6 +325,33 @@ router.get(
       logger.error({ err, materialId }, "Cloudinary proxy error");
       res.status(500).json({ error: "Internal error fetching file" });
     }
+  },
+);
+
+// PATCH /projects/:projectId/meetings/:meetingId/materials/:materialId
+// Assigns real names to diarized speakers (e.g. {"1": "Ana", "2": "Pedro"}).
+router.patch(
+  "/projects/:projectId/meetings/:meetingId/materials/:materialId",
+  async (req, res): Promise<void> => {
+    const params = UpdateMaterialSpeakersParams.safeParse(req.params);
+    if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+    const body = UpdateMaterialSpeakersBody.safeParse(req.body);
+    if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
+
+    const { data: updated, error } = await supabase
+      .from("materials")
+      .update({ speaker_map: body.data.speakerMap })
+      .eq("id", params.data.materialId)
+      .eq("meeting_id", params.data.meetingId)
+      .select()
+      .single();
+
+    if (error || !updated) { res.status(404).json({ error: "Material not found" }); return; }
+    res.json(UpdateMaterialSpeakersResponse.parse(toCamel(updated)));
   },
 );
 

@@ -534,12 +534,15 @@ export default function MeetingDetailScreen() {
               renderItem={({ item }) => (
                 <MaterialCard
                   material={item}
+                  projectId={pid}
+                  meetingId={mid}
                   onRetry={
                     item.status === 'error'
                       ? () => retryMaterial({ projectId: pid, meetingId: mid, materialId: item.id })
                       : undefined
                   }
                   onDelete={() => handleDeleteMaterial(item.id, item.originalName)}
+                  onRefresh={refetchMaterials}
                 />
               )}
               contentContainerStyle={[styles.list, { paddingBottom: bottomPad + 24 }]}

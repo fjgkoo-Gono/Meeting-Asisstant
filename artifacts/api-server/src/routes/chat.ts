@@ -25,6 +25,23 @@ REGLAS IMPORTANTES:
 7. Si los materiales no tienen texto extraído (están en procesamiento o fallaron), indícalo.`;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Replace generic "Speaker N:" labels in a transcript with the real names
+ * stored in speaker_map (e.g. {"1": "Ana", "2": "Pedro"}).
+ */
+function applySpeakerMap(text: string, speakerMap: Record<string, string> | null | undefined): string {
+  if (!speakerMap) return text;
+  let result = text;
+  for (const [num, name] of Object.entries(speakerMap)) {
+    if (name.trim()) {
+      result = result.replace(new RegExp(`Speaker ${num}:`, "g"), `${name.trim()}:`);
+    }
+  }
+  return result;
+}
+
 // ── Context builders ──────────────────────────────────────────────────────────
 
 async function buildMeetingContext(
@@ -72,7 +89,7 @@ async function buildMeetingContext(
       if (m.context_note) lines.push(`Nota de contexto del usuario: ${m.context_note}`);
       if (m.status === "processing") lines.push("[Aún en procesamiento — texto no disponible]");
       else if (m.status === "error") lines.push("[Error al extraer el texto de este material]");
-      else if (m.extracted_text) lines.push(m.extracted_text.slice(0, 8000));
+      else if (m.extracted_text) lines.push(applySpeakerMap(m.extracted_text, m.speaker_map).slice(0, 8000));
       else lines.push("[Sin texto extraído]");
     }
   }
@@ -121,7 +138,7 @@ async function buildProjectContext(
         lines.push(`\n#### Material: ${m.original_name} (tipo: ${m.type})`);
         if (m.status === "processing") lines.push("[Aún en procesamiento]");
         else if (m.status === "error") lines.push("[Error al extraer]");
-        else if (m.extracted_text) lines.push(m.extracted_text.slice(0, 4000));
+        else if (m.extracted_text) lines.push(applySpeakerMap(m.extracted_text, m.speaker_map).slice(0, 4000));
         else lines.push("[Sin texto extraído]");
       }
     }

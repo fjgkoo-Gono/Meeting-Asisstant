@@ -32,6 +32,7 @@ import type {
   ProjectInput,
   ProjectSummary,
   ProjectUpdateInput,
+  SpeakerMapInput,
   Stats
 } from './api.schemas';
 
@@ -288,72 +289,6 @@ export const useCreateProject = <TError = ErrorType<ErrorResponse>,
       return useMutation(getCreateProjectMutationOptions(options));
     }
 
-export const getDeleteProjectUrl = (projectId: number,) => {
-
-
-
-
-  return `/api/projects/${projectId}`
-}
-
-/**
- * @summary Delete a project by ID
- */
-export const deleteProject = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getDeleteProjectUrl(projectId),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-export const getDeleteProjectMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectId: number}, TContext> => {
-
-const mutationKey = ['deleteProject'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProject>>, {projectId: number}> = (props) => {
-          const {projectId} = props ?? {};
-
-          return  deleteProject(projectId,requestOptions)
-        }
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteProjectMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProject>>>
-
-    export type DeleteProjectMutationError = ErrorType<ErrorResponse>
-
-    /**
- * @summary Delete a project by ID
- */
-export const useDeleteProject = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteProject>>,
-        TError,
-        {projectId: number},
-        TContext
-      > => {
-      return useMutation(getDeleteProjectMutationOptions(options));
-    }
-
 export const getListMeetingsUrl = (projectId: number,) => {
 
 
@@ -579,6 +514,77 @@ export function useGetProject<TData = Awaited<ReturnType<typeof getProject>>, TE
 
 
 
+
+export const getDeleteProjectUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}`
+}
+
+/**
+ * @summary Delete a project by ID
+ */
+export const deleteProject = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectUrl(projectId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectId: number}, TContext> => {
+
+const mutationKey = ['deleteProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProject>>, {projectId: number}> = (props) => {
+          const {projectId} = props ?? {};
+
+          return  deleteProject(projectId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProject>>>
+
+    export type DeleteProjectMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a project by ID
+ */
+export const useDeleteProject = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProject>>,
+        TError,
+        {projectId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectMutationOptions(options));
+    }
 
 export const getUpdateProjectUrl = (projectId: number,) => {
 
@@ -1035,6 +1041,82 @@ export const useCreateMaterial = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateMaterialMutationOptions(options));
+    }
+
+export const getUpdateMaterialSpeakersUrl = (projectId: number,
+    meetingId: number,
+    materialId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/meetings/${meetingId}/materials/${materialId}`
+}
+
+/**
+ * @summary Assign real names to diarized speakers in an audio transcript
+ */
+export const updateMaterialSpeakers = async (projectId: number,
+    meetingId: number,
+    materialId: number,
+    speakerMapInput: SpeakerMapInput, options?: Parameters<typeof customFetch>[1]): Promise<Material> => {
+
+  return customFetch<Material>(getUpdateMaterialSpeakersUrl(projectId,meetingId,materialId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(speakerMapInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateMaterialSpeakersMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMaterialSpeakers>>, TError,{projectId: number;meetingId: number;materialId: number;data: BodyType<SpeakerMapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMaterialSpeakers>>, TError,{projectId: number;meetingId: number;materialId: number;data: BodyType<SpeakerMapInput>}, TContext> => {
+
+const mutationKey = ['updateMaterialSpeakers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMaterialSpeakers>>, {projectId: number;meetingId: number;materialId: number;data: BodyType<SpeakerMapInput>}> = (props) => {
+          const {projectId,meetingId,materialId,data} = props ?? {};
+
+          return  updateMaterialSpeakers(projectId,meetingId,materialId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMaterialSpeakersMutationResult = NonNullable<Awaited<ReturnType<typeof updateMaterialSpeakers>>>
+    export type UpdateMaterialSpeakersMutationBody = BodyType<SpeakerMapInput>
+    export type UpdateMaterialSpeakersMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Assign real names to diarized speakers in an audio transcript
+ */
+export const useUpdateMaterialSpeakers = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMaterialSpeakers>>, TError,{projectId: number;meetingId: number;materialId: number;data: BodyType<SpeakerMapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMaterialSpeakers>>,
+        TError,
+        {projectId: number;meetingId: number;materialId: number;data: BodyType<SpeakerMapInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateMaterialSpeakersMutationOptions(options));
     }
 
 export const getDeleteMaterialUrl = (projectId: number,

@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS materials (
   filename       TEXT    NOT NULL,
   original_name  TEXT    NOT NULL,
   extracted_text TEXT,
+  context_note   TEXT,
+  speaker_map    JSONB,
   status         TEXT    NOT NULL DEFAULT 'processing',
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -381,6 +381,51 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /projects/{projectId}/meetings/{meetingId}/materials/{materialId}:
+    patch:
+      operationId: updateMaterialSpeakers
+      tags: [materials]
+      summary: Assign real names to diarized speakers in an audio transcript
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakerMapInput"
+      responses:
+        "200":
+          description: Updated material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteMaterial
       tags: [materials]
@@ -628,7 +673,7 @@ components:
 
     MaterialType:
       type: string
-      enum: [photo, image, pdf, excel, text]
+      enum: [photo, image, pdf, excel, text, audio]
 
     MaterialStatus:
       type: string
@@ -650,11 +695,26 @@ components:
           type: string
         extractedText:
           type: ["string", "null"]
+        contextNote:
+          type: ["string", "null"]
+        speakerMap:
+          type: ["object", "null"]
+          additionalProperties:
+            type: string
         status:
           $ref: "#/components/schemas/MaterialStatus"
         createdAt:
           type: string
           format: date-time
+
+    SpeakerMapInput:
+      type: object
+      required: [speakerMap]
+      properties:
+        speakerMap:
+          type: object
+          additionalProperties:
+            type: string
 
     MaterialFileInput:
       type: object
@@ -676,4 +736,6 @@ components:
         name:
           type: string
         content:
+          type: string
+        contextNote:
           type: string
