@@ -20,5 +20,6 @@ description: Root cause and fix for Feather icons rendering as tofu boxes on And
 
 ## How to apply / debug checklist
 
-- Icons show boxes on device but web looks fine → check version FIRST (`node_modules/@expo/vector-icons/package.json`), then check the `useFonts` key is exactly `"Feather"`.
+- Icons show boxes on device but web looks fine → check version FIRST (`node_modules/@expo/vector-icons/package.json`), then check the `useFonts` key is `"feather"` (lowercase, matching `createIconSet`).
+- If the version is correct and icons are still broken: **Expo Go device cache** is the likely culprit. Fix: clear Metro cache (`rm -rf artifacts/meeting-mobile/node_modules/.cache/metro`), restart the expo workflow, then close Expo Go from the app switcher, re-open, and re-scan the QR. This forces a fresh bundle download.
 - When upgrading Expo SDK, re-evaluate the pin (`npx expo install @expo/vector-icons`).
