@@ -1,7 +1,6 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execFileSync, spawnSync } from "child_process";
 
 /**
  * If `fileRef` is a URL (Cloudinary or otherwise), download it to a temporary
