@@ -1,18 +1,24 @@
 ---
 name: Vector icons in meeting-mobile (Expo SDK 54)
-description: Root cause and fix for Feather icons rendering as tofu boxes/X on Android — version pin, not font loading code.
+description: Root cause and fix for Feather icons rendering as tofu boxes on Android — version pin AND exact font-family name both matter.
 ---
 
-## Rule
+## Rules
 
-`@expo/vector-icons` must stay pinned to `~15.0.3` in `artifacts/meeting-mobile/package.json` while the project is on Expo SDK 54. Never widen to `^15.x`.
+1. **`@expo/vector-icons` must stay pinned to `~15.0.3`** in `artifacts/meeting-mobile/package.json` while on Expo SDK 54. Never widen to `^15.x`.
 
-**Why:** `@expo/vector-icons@15.1.x` is incompatible with SDK 54 (bundles expo-font@56 internals; see expo/vector-icons#372). Symptom: ALL icons render as missing-glyph boxes on Android device while `Font.isLoaded('feather')` returns `true` and `fontError` is null — JS looks healthy, native registration silently fails. Web preview is unaffected (CSS font loading), so the bug is invisible in browser screenshots.
+2. **Font must be registered as `"Feather"` (capital F)**, not `"feather"` (lowercase) in `useFonts`. The `Feather` component resolves to font family `"Feather"` internally — lowercase silently misses it and every icon renders as a tofu box.
 
-**How it regressed:** the caret range `^15.0.3` let a routine `pnpm install` (triggered by adding an unrelated dependency) bump it to 15.1.1. Icons "worked, then broke" with no icon-related code change.
+   Correct entry in `_layout.tsx`:
+   ```ts
+   Feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf'),
+   ```
+
+**Why (version pin):** `@expo/vector-icons@15.1.x` is incompatible with SDK 54. Symptom: icons render as boxes on device while JS reports fonts loaded; web is unaffected.
+
+**Why (capital F):** `@expo/vector-icons` `createIconSet` registers glyphs under the exact family name passed to the constructor — `"Feather"`. Registering the TTF under a different key means the component finds no glyph mapping and renders missing-glyph squares.
 
 ## How to apply / debug checklist
 
-- If icons show boxes on device but web looks fine: check `node_modules/@expo/vector-icons/package.json` version FIRST, before touching font-loading code.
-- The `feather: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf')` entry in `_layout.tsx` `useFonts` preloads the font (family name is `'feather'`, lowercase, per `createIconSet`). Keep it, but it is NOT the fix for the tofu-box symptom.
+- Icons show boxes on device but web looks fine → check version FIRST (`node_modules/@expo/vector-icons/package.json`), then check the `useFonts` key is exactly `"Feather"`.
 - When upgrading Expo SDK, re-evaluate the pin (`npx expo install @expo/vector-icons`).
