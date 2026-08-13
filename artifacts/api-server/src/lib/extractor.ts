@@ -52,7 +52,6 @@ async function transcribeWithGladia(audioUrl: string, apiKey: string): Promise<s
     body: JSON.stringify({
       audio_url: audioUrl,
       diarization: true,
-      language_behaviour: "automatic single language",
     }),
   });
 
