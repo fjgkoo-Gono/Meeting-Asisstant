@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -71,8 +71,7 @@ function SpeakerNameEditor({
   material: Material;
   projectId: number;
   meetingId: number;
-  /** Called with saved names so parent can update display immediately. */
-  onSaved: (savedNames: Record<string, string>) => void;
+  onSaved: () => void;
   colors: ReturnType<typeof useColors>;
 }) {
   const speakers = parseDetectedSpeakers(material.extractedText ?? '');
@@ -83,7 +82,6 @@ function SpeakerNameEditor({
     return result;
   });
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   if (speakers.length === 0) return null;
 
@@ -91,9 +89,7 @@ function SpeakerNameEditor({
     setSaving(true);
     try {
       await updateMaterialSpeakers(projectId, meetingId, material.id, { speakerMap: names });
-      onSaved(names);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      onSaved();
     } catch {
       // ignore — user can retry
     } finally {
@@ -128,15 +124,12 @@ function SpeakerNameEditor({
         disabled={saving}
         style={({ pressed }) => [
           editorStyles.saveBtn,
-          {
-            backgroundColor: saved ? '#4caf50' : colors.primary,
-            opacity: pressed || saving ? 0.7 : 1,
-          },
+          { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 },
         ]}
       >
         {saving
           ? <ActivityIndicator size="small" color="#fff" />
-          : <Text style={editorStyles.saveBtnText}>{saved ? '✓ Guardado' : 'Guardar nombres'}</Text>}
+          : <Text style={editorStyles.saveBtnText}>Guardar nombres</Text>}
       </Pressable>
     </View>
   );
@@ -211,28 +204,9 @@ function TextViewerModal({
   const insets = useSafeAreaInsets();
   const isAudio = material.type === 'audio';
 
-  // Optimistic speaker map — updated immediately when names are saved so the
-  // transcript reflects real names without waiting for a background refetch.
-  const [localSpeakerMap, setLocalSpeakerMap] = useState<Record<string, string> | null>(null);
-
-  // Reset local map when the modal opens so we start fresh from server data.
-  useEffect(() => {
-    if (visible) {
-      setLocalSpeakerMap(null);
-    }
-  }, [visible]);
-
-  const activeSpeakerMap = localSpeakerMap ?? (material.speakerMap as Record<string, string> | null);
   const displayText = isAudio && material.extractedText
-    ? applySpeakerMap(material.extractedText, activeSpeakerMap)
+    ? applySpeakerMap(material.extractedText, material.speakerMap as Record<string, string> | null)
     : (material.extractedText ?? '');
-
-  const handleSpeakersSaved = (savedNames: Record<string, string>) => {
-    // Update transcript immediately without closing the modal.
-    setLocalSpeakerMap(savedNames);
-    // Trigger background refetch so the card preview also updates.
-    onRefresh();
-  };
 
   return (
     <Modal
@@ -275,15 +249,15 @@ function TextViewerModal({
           {/* Speaker name editor (audio only) */}
           {isAudio ? (
             <SpeakerNameEditor
-              material={{ ...material, speakerMap: activeSpeakerMap }}
+              material={material}
               projectId={projectId}
               meetingId={meetingId}
-              onSaved={handleSpeakersSaved}
+              onSaved={() => { onRefresh(); }}
               colors={colors}
             />
           ) : null}
 
-          {/* Full text — reflects saved names immediately via activeSpeakerMap */}
+          {/* Full text */}
           <Text style={[viewerStyles.bodyText, { color: colors.foreground }]} selectable>
             {displayText}
           </Text>
@@ -493,7 +467,7 @@ export function MaterialCard({ material, projectId, meetingId, onRetry, onDelete
           projectId={projectId}
           meetingId={meetingId}
           onClose={() => setShowTextViewer(false)}
-          onRefresh={() => { onRefresh?.(); }}
+          onRefresh={() => { onRefresh?.(); setShowTextViewer(false); }}
         />
       ) : null}
     </>
