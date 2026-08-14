@@ -1,7 +1,8 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { buildSlideImageUrl } from "./cloudinary";
+import JSZip from "jszip";
+import { isSupabaseStorageUrl, downloadFromSupabaseStorage } from "./storage";
 
 /**
  * If `fileRef` is a URL (Cloudinary or otherwise), download it to a temporary
@@ -147,8 +148,8 @@ export async function transcribeAudioBuffer(buffer: Buffer, filename: string): P
 
 /**
  * Extract plain text from a Buffer without needing to re-download from storage.
- * Writes the buffer to a temporary file, runs the same extraction logic as
- * `extractText`, then cleans up the temp file.
+ * For PPTX, uses JSZip directly on the buffer. For all other types, writes the
+ * buffer to a temp file and delegates to extractText.
  *
  * Use this on the initial upload path where the buffer is already in memory.
  * Use `extractText` for retry flows where only the stored URL is available.
@@ -158,6 +159,9 @@ export async function extractTextFromBuffer(
   type: MaterialType,
   filename = "file",
 ): Promise<string> {
+  if (type === "pptx") {
+    return await extractPptxText(buffer);
+  }
   const ext = path.extname(filename) || "";
   const tmpPath = path.join(os.tmpdir(), `meeting-buf-${Date.now()}${ext}`);
   fs.writeFileSync(tmpPath, buffer);
@@ -168,71 +172,41 @@ export async function extractTextFromBuffer(
   }
 }
 
-/** Maximum slides to process per PPTX (caps Claude Vision API cost). */
-const MAX_PPTX_SLIDES = 50;
-
 /**
- * Fetch each slide of a multi-page PPTX from Cloudinary and extract text
- * via Claude Vision. Each slide is retrieved as a JPEG image using the
- * `pg_N` Cloudinary transformation, then sent to the Anthropic Messages API.
+ * Extract plain text from a PPTX buffer by unzipping the OpenXML package
+ * and pulling all <a:t> text runs from each slide's XML.
+ *
+ * PPTX files are ZIP archives containing slide XML under ppt/slides/.
+ * Text content lives in <a:t> elements (DrawingML namespace).
+ * This approach is instant and zero-cost — no Vision API needed.
  */
-async function extractPptxViaVision(baseUrl: string, pageCount: number): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+export async function extractPptxText(buffer: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(buffer);
 
-  const slideCount = Math.min(pageCount, MAX_PPTX_SLIDES);
-  const slideTexts: string[] = [];
-
-  for (let page = 1; page <= slideCount; page++) {
-    const slideUrl = buildSlideImageUrl(baseUrl, page);
-    const imgRes = await fetch(slideUrl);
-    if (!imgRes.ok) {
-      // Cloudinary returns 404 when the page index exceeds the actual slide count
-      if (imgRes.status === 404) break;
-      throw new Error(`Failed to fetch slide ${page} from Cloudinary (${imgRes.status}): ${slideUrl}`);
-    }
-    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-    const base64 = imgBuffer.toString("base64");
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-opus-4-5",
-        max_tokens: 1024,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: "image/jpeg", data: base64 },
-              },
-              {
-                type: "text",
-                text: "Extrae todo el texto y contenido visible de esta diapositiva de presentación. Incluye títulos, viñetas, datos de tablas y gráficos, y cualquier texto en formas o cuadros de texto. Responde solo con el contenido extraído, sin comentarios adicionales.",
-              },
-            ],
-          },
-        ],
-      }),
+  // Collect slide files sorted numerically (slide1.xml, slide2.xml, …)
+  const slideFiles = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/\d+/)?.[0] ?? "0", 10);
+      const nb = parseInt(b.match(/\d+/)?.[0] ?? "0", 10);
+      return na - nb;
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`Anthropic Vision error on slide ${page} (${response.status}): ${errBody}`);
+  const slideTexts: string[] = [];
+  for (let i = 0; i < slideFiles.length; i++) {
+    const xml = await zip.files[slideFiles[i]].async("string");
+
+    // Extract all <a:t> text nodes — these are the atomic text runs in DrawingML
+    const texts: string[] = [];
+    const regex = /<a:t[^>]*>([^<]*)<\/a:t>/g;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(xml)) !== null) {
+      const t = m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").trim();
+      if (t) texts.push(t);
     }
 
-    const data = (await response.json()) as {
-      content: Array<{ type: string; text?: string }>;
-    };
-    const textBlock = data.content.find((b) => b.type === "text");
-    if (textBlock?.text?.trim()) {
-      slideTexts.push(`--- Slide ${page} ---\n${textBlock.text.trim()}`);
+    if (texts.length > 0) {
+      slideTexts.push(`--- Slide ${i + 1} ---\n${texts.join(" ")}`);
     }
   }
 
@@ -249,19 +223,16 @@ export async function extractText(
   fileRef: string,
   type: MaterialType,
 ): Promise<string> {
-  // PPTX: fetch slide images from Cloudinary and process via Claude Vision.
-  // The stored URL encodes the slide count as a fragment: url#pages=N.
-  // No local download needed.
+  // PPTX: stored in Supabase Storage (supa:// URL).
+  // Download the binary and extract text via JSZip — no Vision API needed.
   if (type === "pptx") {
-    if (!fileRef.startsWith("http")) {
-      throw new Error(
-        "PPTX extraction requires a Cloudinary URL. Re-upload the file to generate one.",
-      );
+    if (isSupabaseStorageUrl(fileRef)) {
+      const buffer = await downloadFromSupabaseStorage(fileRef);
+      return await extractPptxText(buffer);
     }
-    const [baseUrl, fragment] = fileRef.split("#");
-    const pagesMatch = fragment?.match(/pages=(\d+)/);
-    const pageCount = pagesMatch ? parseInt(pagesMatch[1], 10) : 1;
-    return await extractPptxViaVision(baseUrl, pageCount);
+    // Legacy: PPTX was previously stored in Cloudinary with Vision extraction.
+    // Re-uploading the file will migrate it to Supabase Storage automatically.
+    throw new Error("Legacy Cloudinary PPTX detected. Re-upload the file to use the new Supabase Storage path.");
   }
 
   // Audio: download to buffer and upload directly to Gladia.

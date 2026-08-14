@@ -6,7 +6,7 @@
  */
 import path from "path";
 import fs from "fs";
-import { isStorageUrl, deleteFromStorage } from "./storage";
+import { isStorageUrl, deleteFromStorage, isSupabaseStorageUrl, deleteFromSupabaseStorage } from "./storage";
 import { deleteFromUrl } from "./cloudinary";
 import { logger } from "./logger";
 
@@ -26,7 +26,9 @@ export async function deleteStorageFile(
   materialId: string | number,
 ): Promise<void> {
   try {
-    if (isStorageUrl(filename)) {
+    if (isSupabaseStorageUrl(filename)) {
+      await deleteFromSupabaseStorage(filename);
+    } else if (isStorageUrl(filename)) {
       await deleteFromStorage(filename);
     } else if (filename.startsWith("http")) {
       await deleteFromUrl(filename);

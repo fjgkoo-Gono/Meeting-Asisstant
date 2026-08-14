@@ -6,7 +6,7 @@ import fs from "fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { supabase } from "./lib/supabase";
-import { isStorageUrl, downloadFromStorage } from "./lib/storage";
+import { isStorageUrl, downloadFromStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage } from "./lib/storage";
 
 const app: Express = express();
 
@@ -40,7 +40,21 @@ app.use("/api/files", async (req: Request, res: Response) => {
   // req.path starts with "/" followed by the filename (or gcs:/ path).
   const raw = req.path.slice(1); // strip leading slash
 
-  // Case 1: GCS URL — browsers collapse gcs:// to gcs:/ in the path.
+  // Case 1a: Supabase Storage URL — browsers collapse supa:// to supa:/ in the path.
+  if (raw.startsWith("supa:/")) {
+    const supaUrl = raw.startsWith("supa://") ? raw : raw.replace("supa:/", "supa://");
+    try {
+      const buffer = await downloadFromSupabaseStorage(supaUrl);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `inline; filename="${path.basename(supaUrl)}"`);
+      return res.end(buffer);
+    } catch (err) {
+      logger.error({ err, supaUrl }, "Legacy /api/files Supabase download error");
+      return res.status(500).json({ error: "Failed to fetch file from storage" });
+    }
+  }
+
+  // Case 1b: GCS URL — browsers collapse gcs:// to gcs:/ in the path.
   // Reconstruct the real gcs:// URL and stream via storage layer.
   if (raw.startsWith("gcs:/")) {
     const gcsUrl = raw.startsWith("gcs://") ? raw : raw.replace("gcs:/", "gcs://");

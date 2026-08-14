@@ -18,16 +18,15 @@ import {
 } from "@workspace/api-zod";
 import { extractText, extractTextFromBuffer, transcribeAudioBuffer, type MaterialType } from "../lib/extractor";
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
-import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage } from "../lib/storage";
+import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage, uploadToSupabaseStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage, deleteFromSupabaseStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
 import { deleteStorageFile } from "../lib/cleanup";
 
-/**
- * Material types routed to Replit Object Storage (GCS).
- * Cloudinary blocks raw delivery for PDF/Excel so those go here instead.
- * PPTX goes to Cloudinary as resource_type:"image" for slide-to-image conversion.
- */
-const STORAGE_TYPES = new Set<string>(["pdf", "excel"]);
+/** Material types routed to Replit Object Storage (GCS). Cloudinary blocks raw delivery for these. */
+const GCS_TYPES = new Set<string>(["pdf", "excel"]);
+
+/** Material types routed to Supabase Storage. Text extracted via JSZip (no Vision API). */
+const SUPABASE_TYPES = new Set<string>(["pptx"]);
 
 const router: IRouter = Router();
 
@@ -149,22 +148,21 @@ router.post(
     const materialType = rawType as MaterialType;
     const rawContextNote = req.body?.contextNote as string | undefined;
 
-    // Route upload: PDF/Excel → Replit Object Storage (Cloudinary blocks raw delivery);
-    // PPTX → Cloudinary as resource_type:"image" (enables per-slide image extraction);
-    // images/audio → Cloudinary as their native resource types.
+    // Route upload:
+    //   PDF/Excel  → Replit Object Storage / GCS (Cloudinary blocks raw delivery)
+    //   PPTX       → Supabase Storage (text extracted via JSZip; no Vision API)
+    //   images/audio → Cloudinary (those resource types deliver fine)
     let storedUrl: string;
     try {
-      if (STORAGE_TYPES.has(materialType)) {
+      if (GCS_TYPES.has(materialType)) {
         storedUrl = await uploadToStorage(req.file.buffer, req.file.originalname);
+      } else if (SUPABASE_TYPES.has(materialType)) {
+        storedUrl = await uploadToSupabaseStorage(req.file.buffer, req.file.originalname);
       } else {
         const resourceType = getResourceType(materialType);
         const ext = path.extname(req.file.originalname).slice(1).toLowerCase();
-        const { secure_url, pages } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
-        // For PPTX: encode the slide count in the stored URL as a fragment (#pages=N)
-        // so the extractor knows how many slides to process without an extra API call.
-        storedUrl = (materialType === "pptx" && pages && pages > 0)
-          ? `${secure_url}#pages=${pages}`
-          : secure_url;
+        const { secure_url } = await uploadBuffer(req.file.buffer, resourceType, ext || undefined);
+        storedUrl = secure_url;
       }
     } catch (uploadErr) {
       logger.error({ uploadErr }, "File upload failed");
@@ -190,21 +188,16 @@ router.post(
     res.status(201).json(CreateMaterialResponse.parse(toCamel(data)));
 
     // Async extraction after response.
-    // Audio: upload the in-memory buffer directly to Gladia (avoids Cloudinary URL auth issues).
-    // PPTX: extraction requires the Cloudinary URL (with #pages=N) to fetch slide images;
-    //        the in-memory buffer is not useful here, so we use the stored URL directly.
-    // Everything else: use the in-memory buffer to avoid re-downloading.
+    // Audio: upload the in-memory buffer directly to Gladia (avoids auth issues with storage URLs).
+    // PPTX + everything else: use the in-memory buffer to avoid re-downloading.
     const materialId = data.id;
     const uploadedBuffer = req.file.buffer;
     const originalName = req.file.originalname;
-    const storedUrlForExtraction = storedUrl; // captured for async closure
     setImmediate(async () => {
       try {
         let text: string;
         if (materialType === "audio") {
           text = await transcribeAudioBuffer(uploadedBuffer, originalName);
-        } else if (materialType === "pptx") {
-          text = await extractText(storedUrlForExtraction, materialType);
         } else {
           text = await extractTextFromBuffer(uploadedBuffer, materialType, originalName);
         }
@@ -294,6 +287,23 @@ router.get(
       .single();
 
     if (!material || !material.filename) { res.status(404).json({ error: "Material not found" }); return; }
+
+    if (isSupabaseStorageUrl(material.filename)) {
+      // Supabase Storage (supa://) — download server-side and stream to client
+      try {
+        const buffer = await downloadFromSupabaseStorage(material.filename);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${encodeURIComponent(material.original_name ?? "file")}"`,
+        );
+        res.end(buffer);
+      } catch (err) {
+        logger.error({ err, materialId }, "Supabase Storage download error");
+        res.status(500).json({ error: "Failed to fetch file from storage" });
+      }
+      return;
+    }
 
     if (isStorageUrl(material.filename)) {
       // Replit Object Storage (GCS) — download server-side and stream to client
