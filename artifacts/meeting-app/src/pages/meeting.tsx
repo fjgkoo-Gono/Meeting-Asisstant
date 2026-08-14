@@ -7,6 +7,7 @@ import {
   useListMaterials,
   getListMaterialsQueryKey,
   useDeleteMeeting,
+  useDeleteMaterial,
   getListMeetingsQueryKey,
   createMaterial,
   retryMaterial,
@@ -431,6 +432,20 @@ function MaterialCard({
 }) {
   const Ic = TYPE_ICON[material.type] ?? Paperclip;
   const [showText, setShowText] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const { mutate: deleteMaterial, isPending: deletePending } = useDeleteMaterial({
+    mutation: {
+      onSuccess: () => {
+        onRefresh();
+        toast.success('Material eliminado');
+        setShowDeleteConfirm(false);
+      },
+      onError: () => {
+        toast.error('Error al eliminar el material. Inténtalo de nuevo.');
+      },
+    },
+  });
 
   const hasFile = material.type !== 'text' && material.filename;
   // All file types go through the API proxy route (handles Cloudinary, GCS, and legacy disk).
@@ -505,6 +520,16 @@ function MaterialCard({
               <RefreshCw className="h-4 w-4" />
             </button>
           )}
+
+          {/* Delete */}
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={material.status === 'processing' || deletePending}
+            className="p-1.5 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Eliminar material"
+          >
+            {deletePending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
         </div>
       </div>
 
@@ -540,6 +565,36 @@ function MaterialCard({
           </div>
         </>
       )}
+
+      {/* Delete material confirmation dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-[400px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">¿Eliminar material?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground mt-1">
+              <span className="font-medium text-foreground">"{material.originalName}"</span> se eliminará permanentemente. Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col gap-2 mt-4 sm:flex-row">
+            <Button
+              variant="outline"
+              className="rounded-xl flex-1"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deletePending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl flex-1"
+              disabled={deletePending}
+              onClick={() => deleteMaterial({ projectId, meetingId, materialId: material.id })}
+            >
+              {deletePending ? <><Loader2 className="h-4 w-4 animate-spin mr-1" />Eliminando…</> : 'Eliminar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
