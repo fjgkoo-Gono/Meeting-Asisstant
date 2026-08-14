@@ -337,11 +337,12 @@ export function MaterialCard({ material, projectId, meetingId, onRetry, onDelete
         ? colors.primary
         : colors.destructive;
 
+  const isProcessingAudio = material.status === 'processing' && material.type === 'audio';
   const statusLabel =
     material.status === 'ready'
       ? 'Ready'
       : material.status === 'processing'
-        ? 'Processing'
+        ? isProcessingAudio ? 'Transcribing audio…' : 'Processing…'
         : 'Failed';
 
   const hasFile = material.type !== 'text' && material.filename;

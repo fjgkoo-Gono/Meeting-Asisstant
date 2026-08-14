@@ -107,13 +107,15 @@ const TYPE_ICON: Record<MaterialType, React.ElementType> = {
   audio: Mic,
 };
 
-function StatusBadge({ status }: { status: Material['status'] }) {
-  if (status === 'processing')
+function StatusBadge({ status, materialType }: { status: Material['status']; materialType: Material['type'] }) {
+  if (status === 'processing') {
+    const label = materialType === 'audio' ? 'Transcribiendo audio…' : 'Procesando…';
     return (
       <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
-        <Loader2 className="h-3 w-3 animate-spin" /> Procesando…
+        <Loader2 className="h-3 w-3 animate-spin" /> {label}
       </span>
     );
+  }
   if (status === 'ready')
     return (
       <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
@@ -466,7 +468,7 @@ function MaterialCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate text-foreground">{material.originalName}</p>
-          <StatusBadge status={material.status} />
+          <StatusBadge status={material.status} materialType={material.type} />
         </div>
 
         {/* Actions */}
