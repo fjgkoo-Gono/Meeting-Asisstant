@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { supabase, toCamel, rowsToCamel } from "../lib/supabase";
+import { deleteStorageFilesAsync } from "../lib/cleanup";
+import { logger } from "../lib/logger";
 import {
   CreateProjectBody,
   GetProjectParams,
@@ -59,6 +61,18 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
   const params = GetProjectParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
+  // Fetch all material filenames across every meeting in this project before
+  // the cascade-delete wipes them from DB. We join through meetings via the
+  // meetings(project_id) foreign key.
+  const { data: materials, error: matErr } = await supabase
+    .from("materials")
+    .select("id, filename, meeting_id, meetings!inner(project_id)")
+    .eq("meetings.project_id", params.data.projectId)
+    .not("filename", "is", null);
+  if (matErr) {
+    logger.warn({ err: matErr, projectId: params.data.projectId }, "Failed to fetch materials before project delete");
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .delete()
@@ -66,6 +80,10 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
     .select()
     .single();
   if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
+
+  // Clean up stored files asynchronously (non-blocking)
+  deleteStorageFilesAsync(materials ?? []);
+
   res.status(204).send();
 });
 

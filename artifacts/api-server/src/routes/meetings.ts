@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { supabase, toCamel, rowsToCamel } from "../lib/supabase";
+import { deleteStorageFilesAsync } from "../lib/cleanup";
+import { logger } from "../lib/logger";
 import {
   CreateMeetingBody,
   CreateMeetingParams,
@@ -126,6 +128,16 @@ router.delete("/projects/:projectId/meetings/:meetingId", async (req, res): Prom
   const params = DeleteMeetingParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
+  // Fetch material filenames before the cascade-delete wipes them from DB
+  const { data: materials, error: matErr } = await supabase
+    .from("materials")
+    .select("id, filename")
+    .eq("meeting_id", params.data.meetingId)
+    .not("filename", "is", null);
+  if (matErr) {
+    logger.warn({ err: matErr, meetingId: params.data.meetingId }, "Failed to fetch materials before meeting delete");
+  }
+
   const { data, error } = await supabase
     .from("meetings")
     .delete()
@@ -134,6 +146,10 @@ router.delete("/projects/:projectId/meetings/:meetingId", async (req, res): Prom
     .select()
     .single();
   if (error || !data) { res.status(404).json({ error: "Meeting not found" }); return; }
+
+  // Clean up stored files asynchronously (non-blocking)
+  deleteStorageFilesAsync(materials ?? []);
+
   res.status(204).send();
 });
 

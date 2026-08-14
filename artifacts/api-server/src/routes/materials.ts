@@ -20,6 +20,7 @@ import { extractText, extractTextFromBuffer, transcribeAudioBuffer, type Materia
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
 import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
+import { deleteStorageFile } from "../lib/cleanup";
 
 /**
  * Material types routed to Replit Object Storage (GCS).
@@ -394,25 +395,9 @@ router.delete(
 
     // Clean up the stored file (async, non-blocking)
     if (deleted.filename) {
-      if (isStorageUrl(deleted.filename)) {
-        // Supabase Storage-backed material
-        deleteFromStorage(deleted.filename).catch((err) =>
-          logger.warn({ err, materialId: deleted.id }, "Failed to delete Supabase Storage asset"),
-        );
-      } else if (deleted.filename.startsWith("http")) {
-        // Cloudinary-backed material (image / audio)
-        deleteFromUrl(deleted.filename).catch((err) =>
-          logger.warn({ err, materialId: deleted.id }, "Failed to delete Cloudinary asset"),
-        );
-      } else {
-        // Legacy local file
-        const legacyPath = path.join(UPLOADS_DIR, deleted.filename);
-        fs.unlink(legacyPath, (err) => {
-          if (err && (err as NodeJS.ErrnoException).code !== "ENOENT") {
-            logger.warn({ err, materialId: deleted.id }, "Failed to delete legacy material file");
-          }
-        });
-      }
+      deleteStorageFile(deleted.filename, deleted.id).catch(() => {
+        // Already logged inside deleteStorageFile
+      });
     }
 
     res.status(204).send();
