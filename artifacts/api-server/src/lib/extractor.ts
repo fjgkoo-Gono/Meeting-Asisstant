@@ -285,7 +285,9 @@ export async function extractText(
       }
 
       case "excel": {
-        const xlsx = (await import("xlsx")) as typeof import("xlsx");
+        const xlsxModule = await import("xlsx");
+        // SheetJS is CommonJS — in an ESM/esbuild context the exports land on .default
+        const xlsx = ((xlsxModule as any).default ?? xlsxModule) as typeof import("xlsx");
         const workbook = xlsx.readFile(localPath);
         const texts: string[] = [];
         for (const sheetName of workbook.SheetNames) {
