@@ -6,13 +6,15 @@ import {
   getGetMeetingQueryKey,
   useListMaterials,
   getListMaterialsQueryKey,
+  useDeleteMeeting,
+  getListMeetingsQueryKey,
   createMaterial,
   retryMaterial,
   uploadFileMaterial,
   updateMaterialSpeakers,
 } from '@workspace/api-client-react';
 import type { Material, MaterialType } from '@workspace/api-client-react';
-import { Link, useRoute } from 'wouter';
+import { Link, useRoute, useLocation } from 'wouter';
 import {
   ChevronLeft,
   Calendar,
@@ -36,9 +38,11 @@ import {
   ChevronUp,
   Mic,
   Presentation,
+  Trash2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
@@ -577,6 +581,20 @@ export default function MeetingDetail() {
   });
 
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { mutate: deleteMeeting, isPending: deleteMeetingPending } = useDeleteMeeting({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListMeetingsQueryKey(projectId) });
+        navigate(`/projects/${projectId}`);
+      },
+      onError: () => {
+        toast.error('Error al eliminar la reunión. Inténtalo de nuevo.');
+        setShowDeleteDialog(false);
+      },
+    },
+  });
   const [showSheet, setShowSheet] = useState(false);
   const [showTextModal, setShowTextModal] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
@@ -666,7 +684,13 @@ export default function MeetingDetail() {
               Project
             </span>
           </div>
-          <div className="w-10 shrink-0" />
+          <button
+            onClick={() => setShowDeleteDialog(true)}
+            className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors shrink-0"
+            aria-label="Delete meeting"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Tabs */}
@@ -835,6 +859,31 @@ export default function MeetingDetail() {
           onSave={handleTextSave}
         />
       )}
+
+      {/* Delete meeting dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-[400px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Delete meeting?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground mt-1">
+              <span className="font-medium text-foreground">"{meeting?.title}"</span> and all its uploaded files will be permanently deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col gap-2 mt-4 sm:flex-row">
+            <Button variant="outline" className="rounded-xl flex-1" onClick={() => setShowDeleteDialog(false)} disabled={deleteMeetingPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl flex-1"
+              disabled={deleteMeetingPending}
+              onClick={() => meeting && deleteMeeting({ projectId, meetingId })}
+            >
+              {deleteMeetingPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

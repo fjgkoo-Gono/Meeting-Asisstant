@@ -1,12 +1,14 @@
-import { useGetProject, useListMeetings, useCreateMeeting, getGetProjectQueryKey, getListMeetingsQueryKey } from '@workspace/api-client-react';
+import { useGetProject, useListMeetings, useCreateMeeting, useDeleteMeeting, getGetProjectQueryKey, getListMeetingsQueryKey } from '@workspace/api-client-react';
+import type { ListMeetingsQueryResult } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Link, useRoute } from 'wouter';
-import { ChevronLeft, Plus, Calendar, FileText, ChevronRight, MessageSquare, X } from 'lucide-react';
+import { ChevronLeft, Plus, Calendar, FileText, ChevronRight, MessageSquare, X, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -61,6 +63,8 @@ function ProjectChatSheet({
 
 // ── Main page ─────────────────────────────────────────────────────────────
 
+type Meeting = ListMeetingsQueryResult[number];
+
 export default function ProjectDetail() {
   const [, params] = useRoute('/projects/:id');
   const projectId = Number(params?.id);
@@ -75,6 +79,7 @@ export default function ProjectDetail() {
   });
 
   const [isNewMeetingOpen, setIsNewMeetingOpen] = useState(false);
+  const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
 
   return (
     <div className="flex flex-col min-h-screen pt-safe bg-background">
@@ -139,8 +144,8 @@ export default function ProjectDetail() {
             </div>
           ) : (
             meetings.map((meeting) => (
-              <Link key={meeting.id} href={`/projects/${projectId}/meetings/${meeting.id}`}>
-                <div className="group flex flex-col p-4 bg-card rounded-2xl border border-border shadow-sm active-elevate hover-elevate transition-all cursor-pointer gap-3">
+              <div key={meeting.id} className="group relative flex bg-card rounded-2xl border border-border shadow-sm hover-elevate transition-all overflow-hidden">
+                <Link href={`/projects/${projectId}/meetings/${meeting.id}`} className="flex-1 flex flex-col p-4 gap-3 active-elevate cursor-pointer">
                   <div className="flex items-start justify-between gap-4">
                     <h4 className="font-medium text-base text-foreground group-hover:text-primary transition-colors line-clamp-2">
                       {meeting.title}
@@ -159,8 +164,15 @@ export default function ProjectDetail() {
                       </div>
                     )}
                   </div>
-                </div>
-              </Link>
+                </Link>
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMeetingToDelete(meeting); }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-3 self-start m-1 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground shrink-0"
+                  aria-label="Delete meeting"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             ))
           )}
         </div>
@@ -185,7 +197,54 @@ export default function ProjectDetail() {
           onClose={() => setShowProjectChat(false)}
         />
       )}
+
+      <DeleteMeetingDialog
+        meeting={meetingToDelete}
+        projectId={projectId}
+        onClose={() => setMeetingToDelete(null)}
+      />
     </div>
+  );
+}
+
+function DeleteMeetingDialog({ meeting, projectId, onClose }: { meeting: Meeting | null; projectId: number; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { mutate: deleteMeeting, isPending } = useDeleteMeeting({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListMeetingsQueryKey(projectId) });
+        onClose();
+      },
+      onError: () => {
+        toast.error('Error al eliminar la reunión. Inténtalo de nuevo.');
+      },
+    },
+  });
+
+  return (
+    <Dialog open={!!meeting} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-[400px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl">Delete meeting?</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground mt-1">
+            <span className="font-medium text-foreground">"{meeting?.title}"</span> and all its uploaded files will be permanently deleted. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex flex-col gap-2 mt-4 sm:flex-row">
+          <Button variant="outline" className="rounded-xl flex-1" onClick={onClose} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            className="rounded-xl flex-1"
+            disabled={isPending}
+            onClick={() => meeting && deleteMeeting({ projectId, meetingId: meeting.id })}
+          >
+            {isPending ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

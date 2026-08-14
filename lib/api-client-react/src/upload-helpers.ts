@@ -14,7 +14,7 @@ import type { Material } from "./generated/api.schemas";
 export async function uploadFileMaterial(
   projectId: number,
   meetingId: number,
-  type: "photo" | "image" | "pdf" | "excel" | "audio",
+  type: "photo" | "image" | "pdf" | "excel" | "audio" | "pptx",
   file: File,
   contextNote?: string,
 ): Promise<Material> {
