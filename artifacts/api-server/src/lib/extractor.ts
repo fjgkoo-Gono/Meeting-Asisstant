@@ -2,7 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import JSZip from "jszip";
-import { isSupabaseStorageUrl, downloadFromSupabaseStorage } from "./storage";
+import { isStorageUrl, downloadFromStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage } from "./storage";
 
 /**
  * If `fileRef` is a URL (Cloudinary or otherwise), download it to a temporary
@@ -237,11 +237,20 @@ export async function extractText(
 
   // Audio: download to buffer and upload directly to Gladia.
   // This avoids any URL-authentication issues with third-party storage.
+  // Audio files are now stored in Replit Object Storage (gcs://) to avoid
+  // Cloudinary's size limit for audio/video uploads.
   if (type === "audio") {
     let audioBuffer: Buffer;
     let audioFilename: string;
 
-    if (fileRef.startsWith("http")) {
+    if (isSupabaseStorageUrl(fileRef)) {
+      audioBuffer = await downloadFromSupabaseStorage(fileRef);
+      audioFilename = path.basename(fileRef) || "audio.mp3";
+    } else if (isStorageUrl(fileRef)) {
+      const { buffer } = await downloadFromStorage(fileRef);
+      audioBuffer = buffer;
+      audioFilename = path.basename(fileRef) || "audio.mp3";
+    } else if (fileRef.startsWith("http")) {
       const dlRes = await fetch(fileRef);
       if (!dlRes.ok) {
         throw new Error(`Failed to fetch audio for transcription (${dlRes.status}): ${fileRef}`);

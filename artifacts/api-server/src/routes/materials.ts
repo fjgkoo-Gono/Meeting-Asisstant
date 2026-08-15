@@ -22,8 +22,12 @@ import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage, 
 import { logger } from "../lib/logger";
 import { deleteStorageFile } from "../lib/cleanup";
 
-/** Material types routed to Replit Object Storage (GCS). Cloudinary blocks raw delivery for these. */
-const GCS_TYPES = new Set<string>(["pdf", "excel"]);
+/**
+ * Material types routed to Replit Object Storage (GCS).
+ * Cloudinary blocks raw delivery for PDF/Excel, and rejects large audio files
+ * (>~10 MB) because it treats them as video requiring async processing.
+ */
+const GCS_TYPES = new Set<string>(["pdf", "excel", "audio"]);
 
 /** Material types routed to Supabase Storage. Text extracted via JSZip (no Vision API). */
 const SUPABASE_TYPES = new Set<string>(["pptx"]);

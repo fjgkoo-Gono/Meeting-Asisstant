@@ -39,6 +39,17 @@ const MIME: Record<string, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   xls:  "application/vnd.ms-excel",
   csv:  "text/csv",
+  // Audio formats
+  mp3:  "audio/mpeg",
+  mp4:  "audio/mp4",
+  m4a:  "audio/mp4",
+  wav:  "audio/wav",
+  ogg:  "audio/ogg",
+  webm: "audio/webm",
+  aac:  "audio/aac",
+  flac: "audio/flac",
+  aiff: "audio/aiff",
+  aif:  "audio/aiff",
 };
 
 function mimeFor(filename: string): string {
