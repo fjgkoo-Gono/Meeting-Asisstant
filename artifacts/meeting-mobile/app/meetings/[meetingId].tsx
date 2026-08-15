@@ -45,7 +45,7 @@ import {
   generateId,
   type ChatMessage as ChatMessageType,
 } from '@/lib/chat';
-import { uploadPhotoMaterial, uploadDocumentMaterial } from '@/lib/upload';
+import { uploadPhotoMaterial, uploadDocumentMaterial, uploadAudioMaterial } from '@/lib/upload';
 
 type Tab = 'materials' | 'chat';
 
@@ -175,6 +175,8 @@ export default function MeetingDetailScreen() {
   const [textContextNote, setTextContextNote] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
 
   // Android custom add-material sheet
   const [showAndroidSheet, setShowAndroidSheet] = useState(false);
@@ -184,7 +186,7 @@ export default function MeetingDetailScreen() {
     uri: string;
     fileName: string;
     mimeType: string;
-    type: 'photo' | 'image' | 'pdf' | 'excel' | 'pptx';
+    type: 'photo' | 'image' | 'pdf' | 'excel' | 'pptx' | 'audio';
   };
   const [pendingUpload, setPendingUpload] = useState<PendingUploadData | null>(null);
   const [contextNoteInput, setContextNoteInput] = useState('');
@@ -387,6 +389,22 @@ export default function MeetingDetailScreen() {
       } finally {
         setUploadingPhoto(false);
       }
+    } else if (type === 'audio') {
+      setUploadingAudio(true);
+      setAudioUploadProgress(0);
+      try {
+        await uploadAudioMaterial(pid, mid, uri, fileName, mimeType, contextNote, (p) => {
+          setAudioUploadProgress(p);
+        });
+        queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey(pid, mid) });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        Alert.alert('Upload failed', msg);
+      } finally {
+        setUploadingAudio(false);
+        setAudioUploadProgress(0);
+      }
     } else {
       setUploadingDocument(true);
       try {
@@ -504,20 +522,34 @@ export default function MeetingDetailScreen() {
             </Text>
             <Pressable
               onPress={showAddOptions}
-              disabled={uploadingPhoto || uploadingDocument}
+              disabled={uploadingPhoto || uploadingDocument || uploadingAudio}
               style={({ pressed }) => [
                 styles.addMaterialBtn,
-                { backgroundColor: colors.primary, opacity: pressed || uploadingPhoto || uploadingDocument ? 0.7 : 1 },
+                { backgroundColor: colors.primary, opacity: pressed || uploadingPhoto || uploadingDocument || uploadingAudio ? 0.7 : 1 },
               ]}
             >
-              {uploadingPhoto || uploadingDocument ? (
-                <ActivityIndicator size="small" color={colors.primaryForeground} />
+              {uploadingAudio ? (
+                <>
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  <Text style={[styles.addMaterialText, { color: colors.primaryForeground }]}>
+                    {audioUploadProgress > 0 ? `${Math.round(audioUploadProgress * 100)}%` : 'Uploading…'}
+                  </Text>
+                </>
+              ) : uploadingPhoto || uploadingDocument ? (
+                <>
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  <Text style={[styles.addMaterialText, { color: colors.primaryForeground }]}>
+                    Add
+                  </Text>
+                </>
               ) : (
-                <Feather name="plus" size={16} color={colors.primaryForeground} />
+                <>
+                  <Feather name="plus" size={16} color={colors.primaryForeground} />
+                  <Text style={[styles.addMaterialText, { color: colors.primaryForeground }]}>
+                    Add
+                  </Text>
+                </>
               )}
-              <Text style={[styles.addMaterialText, { color: colors.primaryForeground }]}>
-                Add
-              </Text>
             </Pressable>
           </View>
 
