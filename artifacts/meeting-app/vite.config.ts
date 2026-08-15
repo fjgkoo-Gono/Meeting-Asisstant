@@ -38,21 +38,26 @@ export default defineConfig({
       manifest: {
         name: 'Meeting Assistant',
         short_name: 'Meetings',
+        description: 'Gestiona reuniones, materiales y chat con IA',
         theme_color: '#faf9f6',
         background_color: '#faf9f6',
         display: 'standalone',
+        orientation: 'portrait',
+        start_url: '/',
         icons: [
           {
-            src: '/favicon.svg',
+            src: '/icon-192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any maskable',
           },
           {
-            src: '/favicon.svg',
+            src: '/icon-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
-          }
-        ]
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
       },
       workbox: {
         // Don't intercept navigations to /api/ paths — let the API server handle them
