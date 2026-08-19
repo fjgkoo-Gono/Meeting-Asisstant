@@ -6,6 +6,7 @@ import materialsRouter from "./materials";
 import chatRouter from "./chat";
 import searchRouter from "./search";
 import timelineRouter from "./timeline";
+import tasksRouter from "./tasks";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(materialsRouter);
 router.use(chatRouter);
 router.use(searchRouter);
 router.use(timelineRouter);
+router.use(tasksRouter);
 
 export default router;

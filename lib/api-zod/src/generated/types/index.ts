@@ -7,7 +7,9 @@
  */
 
 export * from './errorResponse';
+export * from './extractTasksResponse';
 export * from './healthStatus';
+export * from './listTasksParams';
 export * from './material';
 export * from './materialFileInput';
 export * from './materialSpeakerMap';
@@ -31,4 +33,8 @@ export * from './searchResult';
 export * from './speakerMapInput';
 export * from './speakerMapInputSpeakerMap';
 export * from './stats';
+export * from './task';
+export * from './taskInput';
+export * from './taskUpdateInput';
+export * from './taskWithContext';
 export * from './timelineEntry';

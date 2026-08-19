@@ -491,6 +491,226 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/meetings/{meetingId}/tasks:
+    get:
+      operationId: listMeetingTasks
+      tags: [tasks]
+      summary: List tasks for a meeting
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createMeetingTask
+      tags: [tasks]
+      summary: Create a task on a meeting
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/meetings/{meetingId}/tasks/{taskId}:
+    patch:
+      operationId: updateMeetingTask
+      tags: [tasks]
+      summary: Update a task's description, assignee, or completed state
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskUpdateInput"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMeetingTask
+      tags: [tasks]
+      summary: Delete a task
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Task deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/meetings/{meetingId}/tasks/extract:
+    post:
+      operationId: extractMeetingTasks
+      tags: [tasks]
+      summary: Use AI to suggest and create tasks from this meeting's notes and materials
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Newly created tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractTasksResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Extraction failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks across all projects, with optional filters
+      parameters:
+        - name: projectId
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: meetingId
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: assignee
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: completed
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of tasks with meeting/project context
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskWithContext"
+
   /projects/{projectId}/timeline:
     get:
       operationId: getProjectTimeline
@@ -863,3 +1083,78 @@ components:
           type: string
         contextNote:
           type: string
+
+    Task:
+      type: object
+      required: [id, meetingId, description, completed, createdAt]
+      properties:
+        id:
+          type: number
+        meetingId:
+          type: number
+        description:
+          type: string
+        assignee:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    TaskInput:
+      type: object
+      required: [description]
+      properties:
+        description:
+          type: string
+          minLength: 1
+        assignee:
+          type: string
+
+    TaskUpdateInput:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 1
+        assignee:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+
+    TaskWithContext:
+      type: object
+      required: [id, meetingId, meetingTitle, meetingDate, projectId, projectName, description, completed, createdAt]
+      properties:
+        id:
+          type: number
+        meetingId:
+          type: number
+        meetingTitle:
+          type: string
+        meetingDate:
+          type: string
+          format: date
+        projectId:
+          type: number
+        projectName:
+          type: string
+        description:
+          type: string
+        assignee:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ExtractTasksResponse:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"

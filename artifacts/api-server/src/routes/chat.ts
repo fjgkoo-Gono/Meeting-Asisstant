@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
 import { fetchProjectContext } from "../lib/project-context";
+import { fetchMeetingContext } from "../lib/meeting-context";
 
 const router: IRouter = Router();
 
@@ -49,28 +50,10 @@ async function buildMeetingContext(
   projectId: number,
   meetingId: number,
 ): Promise<{ context: string; valid: boolean; error?: string }> {
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .single();
-  if (!project) return { context: "", valid: false, error: "Project not found" };
+  const data = await fetchMeetingContext(projectId, meetingId);
+  if (!data.ok) return { context: "", valid: false, error: data.error };
+  const { project, meeting, materials: mats } = data;
 
-  const { data: meeting } = await supabase
-    .from("meetings")
-    .select("*")
-    .eq("id", meetingId)
-    .eq("project_id", projectId)
-    .single();
-  if (!meeting) return { context: "", valid: false, error: "Meeting not found" };
-
-  const { data: materials } = await supabase
-    .from("materials")
-    .select("*")
-    .eq("meeting_id", meetingId)
-    .order("created_at", { ascending: true });
-
-  const mats = materials ?? [];
   const lines: string[] = [
     `# Proyecto: ${project.name}`,
     project.description ? `Descripción del proyecto: ${project.description}` : "",

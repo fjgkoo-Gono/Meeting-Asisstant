@@ -187,6 +187,55 @@ export interface MaterialTextInput {
   contextNote?: string;
 }
 
+export interface Task {
+  id: number;
+  meetingId: number;
+  description: string;
+  /** @nullable */
+  assignee?: string | null;
+  completed: boolean;
+  createdAt: string;
+}
+
+export interface TaskInput {
+  /** @minLength 1 */
+  description: string;
+  assignee?: string;
+}
+
+export interface TaskUpdateInput {
+  /** @minLength 1 */
+  description?: string;
+  /** @nullable */
+  assignee?: string | null;
+  completed?: boolean;
+}
+
+export interface TaskWithContext {
+  id: number;
+  meetingId: number;
+  meetingTitle: string;
+  meetingDate: string;
+  projectId: number;
+  projectName: string;
+  description: string;
+  /** @nullable */
+  assignee?: string | null;
+  completed: boolean;
+  createdAt: string;
+}
+
+export interface ExtractTasksResponse {
+  tasks: Task[];
+}
+
+export type ListTasksParams = {
+projectId?: number;
+meetingId?: number;
+assignee?: string;
+completed?: boolean;
+};
+
 export type SearchParams = {
 /**
  * @minLength 1

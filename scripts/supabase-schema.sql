@@ -38,3 +38,16 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content      TEXT    NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id          SERIAL PRIMARY KEY,
+  meeting_id  INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  description TEXT    NOT NULL,
+  assignee    TEXT,
+  completed   BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- RLS must stay disabled — the API uses the anon key directly (see
+-- .agents/memory/supabase-js-client.md), not per-user Supabase auth.
+ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;

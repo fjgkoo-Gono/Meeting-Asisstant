@@ -311,6 +311,136 @@ export const RetryMaterialResponse = zod.object({
 
 
 /**
+ * @summary List tasks for a meeting
+ */
+export const ListMeetingTasksParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+export const ListMeetingTasksResponseItem = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "description": zod.string(),
+  "assignee": zod.string().nullish(),
+  "completed": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListMeetingTasksResponse = zod.array(ListMeetingTasksResponseItem)
+
+
+/**
+ * @summary Create a task on a meeting
+ */
+export const CreateMeetingTaskParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+
+
+
+export const CreateMeetingTaskBody = zod.object({
+  "description": zod.string().min(1),
+  "assignee": zod.string().optional()
+})
+
+export const CreateMeetingTaskResponse = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "description": zod.string(),
+  "assignee": zod.string().nullish(),
+  "completed": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a task's description, assignee, or completed state
+ */
+export const UpdateMeetingTaskParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number(),
+  "taskId": zod.coerce.number()
+})
+
+
+
+
+export const UpdateMeetingTaskBody = zod.object({
+  "description": zod.string().min(1).optional(),
+  "assignee": zod.string().nullish(),
+  "completed": zod.boolean().optional()
+})
+
+export const UpdateMeetingTaskResponse = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "description": zod.string(),
+  "assignee": zod.string().nullish(),
+  "completed": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a task
+ */
+export const DeleteMeetingTaskParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number(),
+  "taskId": zod.coerce.number()
+})
+
+export const DeleteMeetingTaskResponse = zod.void()
+
+
+/**
+ * @summary Use AI to suggest and create tasks from this meeting's notes and materials
+ */
+export const ExtractMeetingTasksParams = zod.object({
+  "projectId": zod.coerce.number(),
+  "meetingId": zod.coerce.number()
+})
+
+export const ExtractMeetingTasksResponse = zod.object({
+  "tasks": zod.array(zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "description": zod.string(),
+  "assignee": zod.string().nullish(),
+  "completed": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary List tasks across all projects, with optional filters
+ */
+export const ListTasksQueryParams = zod.object({
+  "projectId": zod.coerce.number().optional(),
+  "meetingId": zod.coerce.number().optional(),
+  "assignee": zod.coerce.string().optional(),
+  "completed": zod.coerce.boolean().optional()
+})
+
+export const ListTasksResponseItem = zod.object({
+  "id": zod.number(),
+  "meetingId": zod.number(),
+  "meetingTitle": zod.string(),
+  "meetingDate": zod.coerce.date(),
+  "projectId": zod.number(),
+  "projectName": zod.string(),
+  "description": zod.string(),
+  "assignee": zod.string().nullish(),
+  "completed": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListTasksResponse = zod.array(ListTasksResponseItem)
+
+
+/**
  * @summary Chronological meeting highlights for a project, with AI-generated change detection between meetings
  */
 export const GetProjectTimelineParams = zod.object({

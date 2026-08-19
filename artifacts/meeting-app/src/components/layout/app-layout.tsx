@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { LayoutList, BarChart2 } from 'lucide-react';
+import { LayoutList, BarChart2, ListTodo } from 'lucide-react';
 
 // Mobile: bottom tab bar (page itself owns scrolling, same as before).
 // Desktop (md+): left sidebar that stays put — the viewport height is fixed
@@ -9,6 +9,7 @@ import { LayoutList, BarChart2 } from 'lucide-react';
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const isHome = location === '/' || location.startsWith('/projects');
+  const isTasks = location === '/tasks';
   const isStats = location === '/stats';
 
   return (
@@ -26,6 +27,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             <LayoutList className="w-5 h-5" />
             Proyectos
+          </Link>
+          <Link
+            href="/tasks"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              isTasks ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            <ListTodo className="w-5 h-5" />
+            Tareas
           </Link>
           <Link
             href="/stats"
@@ -47,6 +57,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex h-16 items-center justify-around">
           <Link href="/" className="flex-1 flex flex-col items-center justify-center gap-1 h-full text-muted-foreground hover:text-foreground">
             <NavItem icon={LayoutList} label="Proyectos" isActive={isHome} />
+          </Link>
+          <Link href="/tasks" className="flex-1 flex flex-col items-center justify-center gap-1 h-full text-muted-foreground hover:text-foreground">
+            <NavItem icon={ListTodo} label="Tareas" isActive={isTasks} />
           </Link>
           <Link href="/stats" className="flex-1 flex flex-col items-center justify-center gap-1 h-full text-muted-foreground hover:text-foreground">
             <NavItem icon={BarChart2} label="Actividad" isActive={isStats} />

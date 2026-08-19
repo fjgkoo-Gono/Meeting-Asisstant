@@ -9,13 +9,19 @@ import {
   useDeleteMeeting,
   useDeleteMaterial,
   useUpdateMeeting,
+  useListMeetingTasks,
+  getListMeetingTasksQueryKey,
+  useCreateMeetingTask,
+  useUpdateMeetingTask,
+  useDeleteMeetingTask,
+  useExtractMeetingTasks,
   getListMeetingsQueryKey,
   createMaterial,
   retryMaterial,
   uploadFileMaterial,
   updateMaterialSpeakers,
 } from '@workspace/api-client-react';
-import type { Material, MaterialType } from '@workspace/api-client-react';
+import type { Material, MaterialType, Task } from '@workspace/api-client-react';
 import { Link, useRoute, useLocation } from 'wouter';
 import {
   ChevronLeft,
@@ -42,10 +48,14 @@ import {
   Presentation,
   Trash2,
   Pencil,
+  Sparkles,
+  Check,
+  User,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useQueryClient } from '@tanstack/react-query';
@@ -814,6 +824,9 @@ export default function MeetingDetail() {
               {/* Notes section */}
               <MeetingNotes projectId={projectId} meetingId={meetingId} notes={(meeting.notes as string | null) ?? null} />
 
+              {/* Tasks section */}
+              <MeetingTasks projectId={projectId} meetingId={meetingId} />
+
               {/* Materials section */}
               <div className="flex flex-col">
                 <div className="flex items-center justify-between mb-4">
@@ -1024,6 +1037,211 @@ function MeetingNotes({
           >
             Sin notas — toca para agregar.
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Tasks ────────────────────────────────────────────────────────────────────
+
+function MeetingTasks({ projectId, meetingId }: { projectId: number; meetingId: number }) {
+  const queryClient = useQueryClient();
+  const { data: tasks = [], isLoading } = useListMeetingTasks(projectId, meetingId, {
+    query: { queryKey: getListMeetingTasksQueryKey(projectId, meetingId) },
+  });
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [newDescription, setNewDescription] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDescription, setEditDescription] = useState('');
+  const [editAssignee, setEditAssignee] = useState('');
+
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: getListMeetingTasksQueryKey(projectId, meetingId) });
+  }, [queryClient, projectId, meetingId]);
+
+  const { mutate: createTask, isPending: creating } = useCreateMeetingTask({
+    mutation: {
+      onSuccess: () => {
+        invalidate();
+        setIsAdding(false);
+        setNewDescription('');
+        setNewAssignee('');
+      },
+      onError: () => toast.error('Error al agregar la tarea. Inténtalo de nuevo.'),
+    },
+  });
+  const { mutate: updateTask } = useUpdateMeetingTask({
+    mutation: {
+      onSuccess: () => invalidate(),
+      onError: () => toast.error('Error al actualizar la tarea. Inténtalo de nuevo.'),
+    },
+  });
+  const { mutate: deleteTask } = useDeleteMeetingTask({
+    mutation: {
+      onSuccess: () => invalidate(),
+      onError: () => toast.error('Error al eliminar la tarea. Inténtalo de nuevo.'),
+    },
+  });
+  const { mutate: extractTasks, isPending: extracting } = useExtractMeetingTasks({
+    mutation: {
+      onSuccess: (result) => {
+        invalidate();
+        if (result.tasks.length === 0) toast.info('No se encontraron tareas accionables en esta reunión.');
+        else toast.success(`${result.tasks.length} tarea${result.tasks.length === 1 ? '' : 's'} agregada${result.tasks.length === 1 ? '' : 's'}.`);
+      },
+      onError: () => toast.error('Error al extraer tareas. Inténtalo de nuevo.'),
+    },
+  });
+
+  const startEdit = (task: Task) => {
+    setEditingId(task.id);
+    setEditDescription(task.description);
+    setEditAssignee(task.assignee ?? '');
+  };
+
+  const saveEdit = () => {
+    if (editingId == null || !editDescription.trim()) return;
+    updateTask({
+      projectId,
+      meetingId,
+      taskId: editingId,
+      data: { description: editDescription.trim(), assignee: editAssignee.trim() || null },
+    });
+    setEditingId(null);
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <h3 className="text-lg font-serif font-semibold text-foreground/80">Tareas</h3>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-full gap-1.5 h-8 text-xs"
+            disabled={extracting}
+            onClick={() => extractTasks({ projectId, meetingId })}
+          >
+            {extracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Extraer con IA
+          </Button>
+          <button
+            onClick={() => setIsAdding((v) => !v)}
+            className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+            aria-label="Agregar tarea"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border shadow-sm rounded-3xl p-4 flex flex-col gap-1 min-h-[90px]">
+        {isAdding && (
+          <div className="flex flex-col gap-2 border-b border-border/50 mb-1 pb-3">
+            <Input
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Descripción de la tarea..."
+              className="rounded-lg h-9 text-sm"
+              autoFocus
+            />
+            <Input
+              value={newAssignee}
+              onChange={(e) => setNewAssignee(e.target.value)}
+              placeholder="Responsable (opcional)"
+              className="rounded-lg h-9 text-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" className="rounded-lg h-8" onClick={() => setIsAdding(false)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-lg h-8"
+                disabled={!newDescription.trim() || creating}
+                onClick={() =>
+                  createTask({
+                    projectId,
+                    meetingId,
+                    data: { description: newDescription.trim(), assignee: newAssignee.trim() || undefined },
+                  })
+                }
+              >
+                {creating ? 'Guardando...' : 'Agregar'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">Cargando...</div>
+        ) : tasks.length === 0 && !isAdding ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            Sin tareas. Usa "Extraer con IA" o agrega una a mano.
+          </div>
+        ) : (
+          tasks.map((task) => (
+            <div key={task.id} className="group flex items-start gap-2.5 py-2 px-1 rounded-xl hover:bg-muted/40 transition-colors">
+              <button
+                onClick={() => updateTask({ projectId, meetingId, taskId: task.id, data: { completed: !task.completed } })}
+                className={`mt-0.5 h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
+                  task.completed ? 'bg-primary border-primary' : 'border-muted-foreground/40 hover:border-primary'
+                }`}
+                aria-label={task.completed ? 'Marcar como pendiente' : 'Marcar como completada'}
+              >
+                {task.completed && <Check className="h-3 w-3 text-primary-foreground" />}
+              </button>
+
+              {editingId === task.id ? (
+                <div className="flex-1 flex flex-col gap-2">
+                  <Input
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="rounded-lg h-8 text-sm"
+                    autoFocus
+                  />
+                  <Input
+                    value={editAssignee}
+                    onChange={(e) => setEditAssignee(e.target.value)}
+                    placeholder="Responsable"
+                    className="rounded-lg h-8 text-sm"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" className="rounded-lg h-7 text-xs" onClick={() => setEditingId(null)}>
+                      Cancelar
+                    </Button>
+                    <Button size="sm" className="rounded-lg h-7 text-xs" onClick={saveEdit}>
+                      Guardar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => startEdit(task)}>
+                    <p className={`text-sm leading-relaxed ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                      {task.description}
+                    </p>
+                    {task.assignee && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        <User className="h-3 w-3" />
+                        {task.assignee}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => deleteTask({ projectId, meetingId, taskId: task.id })}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground shrink-0"
+                    aria-label="Eliminar tarea"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))
         )}
       </div>
     </div>

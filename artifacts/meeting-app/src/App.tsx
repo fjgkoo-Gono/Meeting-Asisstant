@@ -14,6 +14,7 @@ import {
 import { AppLayout } from '@/components/layout/app-layout';
 import Home from '@/pages/home';
 import Stats from '@/pages/stats';
+import Tasks from '@/pages/tasks';
 import ProjectDetail from '@/pages/project';
 import MeetingDetail from '@/pages/meeting';
 
@@ -24,6 +25,7 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={() => <AppLayout><Home /></AppLayout>} />
+        <Route path="/tasks" component={() => <AppLayout><Tasks /></AppLayout>} />
         <Route path="/stats" component={() => <AppLayout><Stats /></AppLayout>} />
         <Route path="/projects/:id" component={() => <AppLayout><ProjectDetail /></AppLayout>} />
         <Route path="/projects/:projectId/meetings/:meetingId" component={() => <AppLayout><MeetingDetail /></AppLayout>} />
