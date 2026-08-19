@@ -227,7 +227,7 @@ export async function extractText(
   // Download the binary and extract text via JSZip — no Vision API needed.
   if (type === "pptx") {
     if (isSupabaseStorageUrl(fileRef)) {
-      const buffer = await downloadFromSupabaseStorage(fileRef);
+      const { buffer } = await downloadFromSupabaseStorage(fileRef);
       return await extractPptxText(buffer);
     }
     // Legacy: PPTX was previously stored in Cloudinary with Vision extraction.
@@ -244,7 +244,7 @@ export async function extractText(
     let audioFilename: string;
 
     if (isSupabaseStorageUrl(fileRef)) {
-      audioBuffer = await downloadFromSupabaseStorage(fileRef);
+      ({ buffer: audioBuffer } = await downloadFromSupabaseStorage(fileRef));
       audioFilename = path.basename(fileRef) || "audio.mp3";
     } else if (isStorageUrl(fileRef)) {
       const { buffer } = await downloadFromStorage(fileRef);
@@ -265,11 +265,19 @@ export async function extractText(
     return await transcribeAudioBuffer(audioBuffer, audioFilename);
   }
 
-  // Resolve remote URL → local temp file so all cases below can read from disk
+  // Resolve remote URL / storage reference → local temp file so all cases below can read from disk
   let localPath = fileRef;
   let tmpDownload: string | null = null;
 
-  if (fileRef.startsWith("http")) {
+  if (isSupabaseStorageUrl(fileRef) || isStorageUrl(fileRef)) {
+    const { buffer } = isSupabaseStorageUrl(fileRef)
+      ? await downloadFromSupabaseStorage(fileRef)
+      : await downloadFromStorage(fileRef);
+    const ext = path.extname(fileRef) || "";
+    tmpDownload = path.join(os.tmpdir(), `meeting-extract-${Date.now()}${ext}`);
+    fs.writeFileSync(tmpDownload, buffer);
+    localPath = tmpDownload;
+  } else if (fileRef.startsWith("http")) {
     const urlExt = path.extname(new URL(fileRef).pathname) || "";
     tmpDownload = await downloadToTemp(fileRef, urlExt);
     localPath = tmpDownload;

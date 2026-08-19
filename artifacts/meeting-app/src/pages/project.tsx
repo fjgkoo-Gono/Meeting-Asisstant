@@ -1,10 +1,11 @@
-import { useGetProject, useListMeetings, useCreateMeeting, useDeleteMeeting, getGetProjectQueryKey, getListMeetingsQueryKey } from '@workspace/api-client-react';
+import { useGetProject, useListMeetings, useCreateMeeting, useDeleteMeeting, useGetProjectTimeline, getGetProjectQueryKey, getListMeetingsQueryKey, getGetProjectTimelineQueryKey } from '@workspace/api-client-react';
 import type { ListMeetingsQueryResult } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Link, useRoute } from 'wouter';
-import { ChevronLeft, Plus, Calendar, FileText, ChevronRight, MessageSquare, X, Trash2 } from 'lucide-react';
+import { ChevronLeft, Plus, Calendar, FileText, ChevronRight, MessageSquare, X, Trash2, History, Loader2, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,10 +66,13 @@ function ProjectChatSheet({
 
 type Meeting = ListMeetingsQueryResult[number];
 
+type ProjectView = 'meetings' | 'timeline';
+
 export default function ProjectDetail() {
   const [, params] = useRoute('/projects/:id');
   const projectId = Number(params?.id);
   const [showProjectChat, setShowProjectChat] = useState(false);
+  const [view, setView] = useState<ProjectView>('meetings');
 
   const { data: project, isLoading: projectLoading } = useGetProject(projectId, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId) }
@@ -82,9 +86,9 @@ export default function ProjectDetail() {
   const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
 
   return (
-    <div className="flex flex-col min-h-screen pt-safe bg-background">
+    <div className="flex flex-col min-h-screen md:min-h-0 md:h-full pt-safe bg-background">
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="flex items-center justify-between h-14 px-4 max-w-md mx-auto w-full">
+        <div className="flex items-center justify-between h-14 px-4 max-w-md md:max-w-xl lg:max-w-2xl mx-auto w-full">
           <Link href="/">
             <Button variant="ghost" size="icon" className="-ml-2 h-10 w-10 rounded-full">
               <ChevronLeft className="h-6 w-6" />
@@ -92,7 +96,7 @@ export default function ProjectDetail() {
           </Link>
           <div className="flex-1 px-2 overflow-hidden">
             <h1 className="text-base font-semibold truncate text-center">
-              {project?.name ?? 'Project'}
+              {project?.name ?? 'Proyecto'}
             </h1>
           </div>
           <div className="w-10 flex justify-end">
@@ -107,7 +111,7 @@ export default function ProjectDetail() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col px-4 py-6 max-w-md mx-auto w-full">
+      <main className="flex-1 flex flex-col px-4 py-6 max-w-md md:max-w-xl lg:max-w-2xl mx-auto w-full">
         {projectLoading ? (
           <div className="h-20 bg-muted/50 animate-pulse rounded-2xl mb-8" />
         ) : (
@@ -120,10 +124,33 @@ export default function ProjectDetail() {
         )}
 
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-serif font-semibold">Meetings</h3>
-          <div className="text-sm text-muted-foreground">{meetings?.length ?? 0} total</div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setView('meetings')}
+              className={`px-3 py-1.5 rounded-full text-sm font-serif font-semibold transition-colors ${
+                view === 'meetings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Reuniones
+            </button>
+            <button
+              onClick={() => setView('timeline')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-serif font-semibold transition-colors ${
+                view === 'timeline' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <History className="h-3.5 w-3.5" />
+              Línea de tiempo
+            </button>
+          </div>
+          {view === 'meetings' && (
+            <div className="text-sm text-muted-foreground">{meetings?.length ?? 0} en total</div>
+          )}
         </div>
 
+        {view === 'timeline' ? (
+          <ProjectTimeline projectId={projectId} />
+        ) : (
         <div className="flex-col flex gap-3 pb-28">
           {meetingsLoading ? (
             [1, 2, 3].map(i => (
@@ -132,14 +159,14 @@ export default function ProjectDetail() {
           ) : !meetings?.length ? (
             <div className="text-center py-12 text-muted-foreground bg-card border border-border border-dashed rounded-2xl">
               <Calendar className="h-10 w-10 mb-3 mx-auto opacity-20" />
-              <p className="font-medium text-foreground mb-1">No meetings yet</p>
-              <p className="text-sm">Record your first meeting for this project.</p>
+              <p className="font-medium text-foreground mb-1">Todavía no hay reuniones</p>
+              <p className="text-sm">Registra la primera reunión de este proyecto.</p>
               <Button
                 variant="outline"
                 className="mt-4 rounded-xl"
                 onClick={() => setIsNewMeetingOpen(true)}
               >
-                Add Meeting
+                Agregar reunión
               </Button>
             </div>
           ) : (
@@ -155,12 +182,12 @@ export default function ProjectDetail() {
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5" />
-                      <span>{format(parseISO(meeting.date), 'MMM d, yyyy')}</span>
+                      <span>{format(parseISO(meeting.date), "d 'de' MMM, yyyy", { locale: es })}</span>
                     </div>
                     {meeting.notes && (
                       <div className="flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5" />
-                        <span>Notes attached</span>
+                        <span>Con notas</span>
                       </div>
                     )}
                   </div>
@@ -168,7 +195,7 @@ export default function ProjectDetail() {
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMeetingToDelete(meeting); }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity p-3 self-start m-1 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground shrink-0"
-                  aria-label="Delete meeting"
+                  aria-label="Eliminar reunión"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -176,6 +203,7 @@ export default function ProjectDetail() {
             ))
           )}
         </div>
+        )}
       </main>
 
       {/* Floating "Consultar proyecto" button */}
@@ -225,14 +253,14 @@ function DeleteMeetingDialog({ meeting, projectId, onClose }: { meeting: Meeting
     <Dialog open={!!meeting} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-[400px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe">
         <DialogHeader>
-          <DialogTitle className="font-serif text-xl">Delete meeting?</DialogTitle>
+          <DialogTitle className="font-serif text-xl">¿Eliminar reunión?</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground mt-1">
-            <span className="font-medium text-foreground">"{meeting?.title}"</span> and all its uploaded files will be permanently deleted. This cannot be undone.
+            <span className="font-medium text-foreground">"{meeting?.title}"</span> y todos sus archivos subidos se eliminarán permanentemente. Esto no se puede deshacer.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex flex-col gap-2 mt-4 sm:flex-row">
           <Button variant="outline" className="rounded-xl flex-1" onClick={onClose} disabled={isPending}>
-            Cancel
+            Cancelar
           </Button>
           <Button
             variant="destructive"
@@ -240,7 +268,7 @@ function DeleteMeetingDialog({ meeting, projectId, onClose }: { meeting: Meeting
             disabled={isPending}
             onClick={() => meeting && deleteMeeting({ projectId, meetingId: meeting.id })}
           >
-            {isPending ? 'Deleting…' : 'Delete'}
+            {isPending ? 'Eliminando…' : 'Eliminar'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -249,8 +277,8 @@ function DeleteMeetingDialog({ meeting, projectId, onClose }: { meeting: Meeting
 }
 
 const formSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  date: z.string().min(1, "Date is required"),
+  title: z.string().min(1, "El título es obligatorio"),
+  date: z.string().min(1, "La fecha es obligatoria"),
   notes: z.string().optional()
 });
 
@@ -301,7 +329,7 @@ function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe flex flex-col max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle className="font-serif text-xl">New Meeting</DialogTitle>
+          <DialogTitle className="font-serif text-xl">Nueva reunión</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4 mt-4 overflow-y-auto pr-2 pb-4">
@@ -310,9 +338,9 @@ function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Meeting Title</FormLabel>
+                  <FormLabel>Título de la reunión</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Kickoff with Client" className="rounded-xl" {...field} />
+                    <Input placeholder="ej. Kickoff con el cliente" className="rounded-xl" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -323,7 +351,7 @@ function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number
               name="date"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Date</FormLabel>
+                  <FormLabel>Fecha</FormLabel>
                   <FormControl>
                     <Input type="date" className="rounded-xl" {...field} />
                   </FormControl>
@@ -336,10 +364,10 @@ function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Initial Notes (Optional)</FormLabel>
+                  <FormLabel>Notas iniciales (opcional)</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Jot down some initial thoughts..."
+                      placeholder="Anota algunas ideas iniciales..."
                       className="rounded-xl resize-none min-h-[120px]"
                       {...field}
                     />
@@ -353,11 +381,85 @@ function NewMeetingDialog({ projectId, open, onOpenChange }: { projectId: number
               className="w-full rounded-xl mt-4 h-12 text-base font-medium"
               disabled={createMeeting.isPending}
             >
-              {createMeeting.isPending ? 'Saving...' : 'Save Meeting'}
+              {createMeeting.isPending ? 'Guardando...' : 'Guardar reunión'}
             </Button>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Timeline view ────────────────────────────────────────────────────────────
+//
+// Generated live by Claude each time this tab is opened (no caching) — reads
+// the whole project's meetings + materials, so it can take a few seconds and
+// costs a real API call. Highlights a meeting when it changes or contradicts
+// something from an earlier one.
+
+function ProjectTimeline({ projectId }: { projectId: number }) {
+  const { data, isLoading, isError } = useGetProjectTimeline(projectId, {
+    query: { queryKey: getGetProjectTimelineQueryKey(projectId) },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3 pb-28">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Analizando el historial del proyecto...
+        </div>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="h-24 bg-muted/50 animate-pulse rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="text-center py-12 text-muted-foreground bg-card border border-border border-dashed rounded-2xl">
+        <p className="text-sm">No se pudo generar la línea de tiempo. Inténtalo de nuevo.</p>
+      </div>
+    );
+  }
+
+  if (data.entries.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground bg-card border border-border border-dashed rounded-2xl">
+        <History className="h-10 w-10 mb-3 mx-auto opacity-20" />
+        <p className="text-sm">Todavía no hay reuniones para mostrar en la línea de tiempo.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex flex-col gap-6 py-2 pl-6 pb-28">
+      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+      {data.entries.map((entry) => (
+        <Link key={entry.meetingId} href={`/projects/${projectId}/meetings/${entry.meetingId}`} className="relative block group">
+          <div
+            className={`absolute -left-6 top-1 h-3.5 w-3.5 rounded-full border-2 border-background ${
+              entry.changeFromPrevious ? 'bg-amber-500' : 'bg-primary'
+            }`}
+          />
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h4 className="font-medium text-sm text-foreground group-hover:text-primary transition-colors">{entry.title}</h4>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {format(parseISO(entry.date as unknown as string), "d 'de' MMM, yyyy", { locale: es })}
+            </span>
+          </div>
+          {entry.highlight && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{entry.highlight}</p>
+          )}
+          {entry.changeFromPrevious && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-lg px-2.5 py-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>{entry.changeFromPrevious}</span>
+            </div>
+          )}
+        </Link>
+      ))}
+    </div>
   );
 }

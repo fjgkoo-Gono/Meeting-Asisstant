@@ -23,14 +23,11 @@ function Router() {
   return (
     <RoutedErrorBoundary>
       <Switch>
-        {/* Pages that have the bottom nav */}
         <Route path="/" component={() => <AppLayout><Home /></AppLayout>} />
         <Route path="/stats" component={() => <AppLayout><Stats /></AppLayout>} />
-        
-        {/* Detail pages (no bottom nav, just back button in header) */}
-        <Route path="/projects/:id" component={ProjectDetail} />
-        <Route path="/projects/:projectId/meetings/:meetingId" component={MeetingDetail} />
-        
+        <Route path="/projects/:id" component={() => <AppLayout><ProjectDetail /></AppLayout>} />
+        <Route path="/projects/:projectId/meetings/:meetingId" component={() => <AppLayout><MeetingDetail /></AppLayout>} />
+
         {/* 404 */}
         <Route component={NotFound} />
       </Switch>

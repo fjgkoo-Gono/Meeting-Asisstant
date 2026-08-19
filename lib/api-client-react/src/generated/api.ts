@@ -31,7 +31,10 @@ import type {
   Project,
   ProjectInput,
   ProjectSummary,
+  ProjectTimeline,
   ProjectUpdateInput,
+  SearchParams,
+  SearchResult,
   SpeakerMapInput,
   Stats
 } from './api.schemas';
@@ -1269,6 +1272,83 @@ export const useRetryMaterial = <TError = ErrorType<ErrorResponse>,
       return useMutation(getRetryMaterialMutationOptions(options));
     }
 
+export const getGetProjectTimelineUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/timeline`
+}
+
+/**
+ * @summary Chronological meeting highlights for a project, with AI-generated change detection between meetings
+ */
+export const getProjectTimeline = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectTimeline> => {
+
+  return customFetch<ProjectTimeline>(getGetProjectTimelineUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectTimelineQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/timeline`
+    ] as const;
+    }
+
+
+export const getGetProjectTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getProjectTimeline>>, TError = ErrorType<ErrorResponse>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectTimelineQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectTimeline>>> = ({ signal }) => getProjectTimeline(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectTimeline>>>
+export type GetProjectTimelineQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Chronological meeting highlights for a project, with AI-generated change detection between meetings
+ */
+
+export function useGetProjectTimeline<TData = Awaited<ReturnType<typeof getProjectTimeline>>, TError = ErrorType<ErrorResponse>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectTimelineQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetProjectSummaryUrl = (projectId: number,) => {
 
 
@@ -1334,6 +1414,90 @@ export function useGetProjectSummary<TData = Awaited<ReturnType<typeof getProjec
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetProjectSummaryQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchUrl = (params: SearchParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/search?${stringifiedParams}` : `/api/search`
+}
+
+/**
+ * @summary Search projects (name/description), meetings (title), and materials (extracted text/context note)
+ */
+export const search = async (params: SearchParams, options?: Parameters<typeof customFetch>[1]): Promise<SearchResult> => {
+
+  return customFetch<SearchResult>(getSearchUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchQueryKey = (params?: SearchParams,) => {
+    return [
+    `/api/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchQueryOptions = <TData = Awaited<ReturnType<typeof search>>, TError = ErrorType<ErrorResponse>>(params: SearchParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof search>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof search>>> = ({ signal }) => search(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof search>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchQueryResult = NonNullable<Awaited<ReturnType<typeof search>>>
+export type SearchQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Search projects (name/description), meetings (title), and materials (extracted text/context note)
+ */
+
+export function useSearch<TData = Awaited<ReturnType<typeof search>>, TError = ErrorType<ErrorResponse>>(
+ params: SearchParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof search>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

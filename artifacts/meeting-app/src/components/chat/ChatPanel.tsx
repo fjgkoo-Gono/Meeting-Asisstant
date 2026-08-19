@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChatBubble } from './ChatBubble';
-import { getBaseUrl } from '@/lib/api';
+import { getBaseUrl, getAuthHeaders } from '@/lib/api';
 
 interface Message {
   id?: number;
@@ -29,7 +29,7 @@ export function ChatPanel({ chatEndpoint, placeholder }: ChatPanelProps) {
   // Load history
   useEffect(() => {
     setHistoryLoading(true);
-    fetch(`${getBaseUrl()}${chatEndpoint}`)
+    fetch(`${getBaseUrl()}${chatEndpoint}`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then((data: { role: string; content: string; id: number }[]) => {
         if (Array.isArray(data)) {
@@ -78,7 +78,7 @@ export function ChatPanel({ chatEndpoint, placeholder }: ChatPanelProps) {
     try {
       const resp = await fetch(`${getBaseUrl()}${chatEndpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ message: text, history }),
       });
 
@@ -174,7 +174,7 @@ export function ChatPanel({ chatEndpoint, placeholder }: ChatPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 max-w-md md:max-w-xl lg:max-w-2xl mx-auto w-full">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
             <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -201,7 +201,7 @@ export function ChatPanel({ chatEndpoint, placeholder }: ChatPanelProps) {
 
       {/* Input area */}
       <div className="shrink-0 border-t border-border bg-background/80 backdrop-blur-md px-4 py-3 pb-safe">
-        <div className="flex items-end gap-2 max-w-md mx-auto">
+        <div className="flex items-end gap-2 max-w-md md:max-w-xl lg:max-w-2xl mx-auto">
           <textarea
             ref={textareaRef}
             rows={1}

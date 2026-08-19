@@ -1,12 +1,14 @@
 /**
  * Storage helpers for raw file types.
  *
- * PDF / Excel → Replit Object Storage (GCS). Cloudinary blocks raw delivery.
- * PPTX → Supabase Storage (supa:// prefix). Simple raw storage, text extracted via JSZip.
- * Images / audio → Cloudinary (those resource types deliver fine).
+ * PDF / Excel / audio / PPTX → Supabase Storage (supa:// prefix). Cloudinary
+ * blocks raw delivery for PDF/Excel and rejects large audio files.
+ * Images → Cloudinary (that resource type delivers fine).
  *
  * URL schemes stored in DB:
- *   gcs://bucket/path   → Replit Object Storage
+ *   gcs://bucket/path   → Replit Object Storage (legacy — read/delete only, kept for the one
+ *                         file too large for Supabase Storage's free-tier 50MB limit; only
+ *                         reachable while running inside Replit, since it needs the sidecar)
  *   supa://bucket/path  → Supabase Storage
  */
 import path from "path";
@@ -39,6 +41,7 @@ const MIME: Record<string, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   xls:  "application/vnd.ms-excel",
   csv:  "text/csv",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   // Audio formats
   mp3:  "audio/mpeg",
   mp4:  "audio/mp4",
@@ -55,27 +58,6 @@ const MIME: Record<string, string> = {
 function mimeFor(filename: string): string {
   const ext = path.extname(filename).slice(1).toLowerCase();
   return MIME[ext] ?? "application/octet-stream";
-}
-
-/**
- * Upload a buffer to Replit Object Storage.
- * Returns a `gcs://bucket/path` reference stored in the DB and resolved by the proxy.
- */
-export async function uploadToStorage(
-  buffer: Buffer,
-  originalFilename: string,
-): Promise<string> {
-  const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
-  if (!bucketId) throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID is not set");
-
-  const ext = path.extname(originalFilename);
-  const objectName = `meeting-materials/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
-  const contentType = mimeFor(originalFilename);
-
-  const file = gcsClient.bucket(bucketId).file(objectName);
-  await file.save(buffer, { metadata: { contentType }, resumable: false });
-
-  return `${GCS_PREFIX}${bucketId}/${objectName}`;
 }
 
 /** Return true if the stored filename is a Replit Object Storage reference. */
@@ -112,12 +94,10 @@ export async function deleteFromStorage(url: string): Promise<void> {
   await gcsClient.bucket(bucketId).file(objectName).delete({ ignoreNotFound: true });
 }
 
-// ── Supabase Storage helpers (PPTX files) ─────────────────────────────────────
+// ── Supabase Storage helpers (PDF / Excel / audio / PPTX) ────────────────────
 
 /** Internal URL scheme stored in the database for Supabase Storage files. */
 const SUPA_PREFIX = "supa://";
-
-const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 function supaParseUrl(url: string): { bucket: string; objectPath: string } {
   const rest = url.slice(SUPA_PREFIX.length); // "bucket/path/to/file"
@@ -135,7 +115,7 @@ export async function uploadToSupabaseStorage(
   const bucket = "meeting-materials";
 
   const { error } = await supabase.storage.from(bucket).upload(objectPath, buffer, {
-    contentType: PPTX_MIME,
+    contentType: mimeFor(originalFilename),
     upsert: false,
   });
   if (error) throw new Error(`Supabase Storage upload failed: ${error.message}`);
@@ -148,12 +128,18 @@ export function isSupabaseStorageUrl(url: string): boolean {
   return url.startsWith(SUPA_PREFIX);
 }
 
-/** Download a file from Supabase Storage and return its buffer. */
-export async function downloadFromSupabaseStorage(url: string): Promise<Buffer> {
+/**
+ * Download a file from Supabase Storage. Content-type is inferred from the
+ * object path's extension (preserved from the original upload) rather than
+ * queried from storage metadata, avoiding an extra API call.
+ */
+export async function downloadFromSupabaseStorage(
+  url: string,
+): Promise<{ buffer: Buffer; contentType: string }> {
   const { bucket, objectPath } = supaParseUrl(url);
   const { data, error } = await supabase.storage.from(bucket).download(objectPath);
   if (error) throw new Error(`Supabase Storage download failed: ${error.message}`);
-  return Buffer.from(await data.arrayBuffer());
+  return { buffer: Buffer.from(await data.arrayBuffer()), contentType: mimeFor(objectPath) };
 }
 
 /** Delete a file from Supabase Storage. Silently ignores missing files. */

@@ -18,19 +18,16 @@ import {
 } from "@workspace/api-zod";
 import { extractText, extractTextFromBuffer, transcribeAudioBuffer, type MaterialType } from "../lib/extractor";
 import { uploadBuffer, getResourceType, deleteFromUrl } from "../lib/cloudinary";
-import { uploadToStorage, isStorageUrl, downloadFromStorage, deleteFromStorage, uploadToSupabaseStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage, deleteFromSupabaseStorage } from "../lib/storage";
+import { isStorageUrl, downloadFromStorage, uploadToSupabaseStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage, deleteFromSupabaseStorage } from "../lib/storage";
 import { logger } from "../lib/logger";
 import { deleteStorageFile } from "../lib/cleanup";
 
 /**
- * Material types routed to Replit Object Storage (GCS).
+ * Material types routed to Supabase Storage. Text extracted via JSZip (no Vision API).
  * Cloudinary blocks raw delivery for PDF/Excel, and rejects large audio files
  * (>~10 MB) because it treats them as video requiring async processing.
  */
-const GCS_TYPES = new Set<string>(["pdf", "excel", "audio"]);
-
-/** Material types routed to Supabase Storage. Text extracted via JSZip (no Vision API). */
-const SUPABASE_TYPES = new Set<string>(["pptx"]);
+const SUPABASE_TYPES = new Set<string>(["pptx", "pdf", "excel", "audio"]);
 
 const router: IRouter = Router();
 
@@ -39,11 +36,14 @@ const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
 /**
  * Resolve a material's stored filename to a value extractText can consume.
- * - Cloudinary URL (starts with http) → passed through as-is (extractor downloads it)
+ * - Cloudinary URL, or a supa:// / gcs:// storage reference → passed through
+ *   as-is (extractText knows how to download each of these itself)
  * - Legacy short name → resolved to the local uploads directory path
  */
 function resolveFileRef(filename: string): string {
-  if (filename.startsWith("http")) return filename;
+  if (filename.startsWith("http") || filename.startsWith("supa://") || filename.startsWith("gcs://")) {
+    return filename;
+  }
   return path.join(UPLOADS_DIR, filename);
 }
 
@@ -153,14 +153,11 @@ router.post(
     const rawContextNote = req.body?.contextNote as string | undefined;
 
     // Route upload:
-    //   PDF/Excel  → Replit Object Storage / GCS (Cloudinary blocks raw delivery)
-    //   PPTX       → Supabase Storage (text extracted via JSZip; no Vision API)
-    //   images/audio → Cloudinary (those resource types deliver fine)
+    //   PDF/Excel/audio/PPTX → Supabase Storage (text extracted via JSZip; no Vision API)
+    //   images → Cloudinary
     let storedUrl: string;
     try {
-      if (GCS_TYPES.has(materialType)) {
-        storedUrl = await uploadToStorage(req.file.buffer, req.file.originalname);
-      } else if (SUPABASE_TYPES.has(materialType)) {
+      if (SUPABASE_TYPES.has(materialType)) {
         storedUrl = await uploadToSupabaseStorage(req.file.buffer, req.file.originalname);
       } else {
         const resourceType = getResourceType(materialType);
@@ -295,8 +292,8 @@ router.get(
     if (isSupabaseStorageUrl(material.filename)) {
       // Supabase Storage (supa://) — download server-side and stream to client
       try {
-        const buffer = await downloadFromSupabaseStorage(material.filename);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        const { buffer, contentType } = await downloadFromSupabaseStorage(material.filename);
+        res.setHeader("Content-Type", contentType);
         res.setHeader(
           "Content-Disposition",
           `inline; filename="${encodeURIComponent(material.original_name ?? "file")}"`,

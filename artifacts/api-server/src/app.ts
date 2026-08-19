@@ -7,8 +7,11 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { supabase } from "./lib/supabase";
 import { isStorageUrl, downloadFromStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage } from "./lib/storage";
+import { requireApiSecret, warnIfApiSecretMissing } from "./middlewares/auth";
 
 const app: Express = express();
+
+warnIfApiSecretMissing();
 
 app.use(
   pinoHttp({
@@ -29,9 +32,16 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// Comma-separated list of allowed browser origins. Defaults to the local
+// Vite dev server; set to your deployed frontend's origin(s) in production.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/api", requireApiSecret);
 
 // Compatibility shim: old frontend builds hit /api/files/:filename.
 // Route each case to the right source so cached clients keep working.
@@ -44,8 +54,8 @@ app.use("/api/files", async (req: Request, res: Response) => {
   if (raw.startsWith("supa:/")) {
     const supaUrl = raw.startsWith("supa://") ? raw : raw.replace("supa:/", "supa://");
     try {
-      const buffer = await downloadFromSupabaseStorage(supaUrl);
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      const { buffer, contentType } = await downloadFromSupabaseStorage(supaUrl);
+      res.setHeader("Content-Type", contentType);
       res.setHeader("Content-Disposition", `inline; filename="${path.basename(supaUrl)}"`);
       return res.end(buffer);
     } catch (err) {

@@ -84,6 +84,41 @@ export interface Stats {
   recentMeetings: RecentMeeting[];
 }
 
+export interface SearchProjectResult {
+  id: number;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+}
+
+export interface SearchMeetingResult {
+  id: number;
+  projectId: number;
+  projectName: string;
+  title: string;
+  date: string;
+  /** @nullable */
+  snippet?: string | null;
+}
+
+export interface SearchResult {
+  projects: SearchProjectResult[];
+  meetings: SearchMeetingResult[];
+}
+
+export interface TimelineEntry {
+  meetingId: number;
+  title: string;
+  date: string;
+  highlight: string;
+  /** @nullable */
+  changeFromPrevious?: string | null;
+}
+
+export interface ProjectTimeline {
+  entries: TimelineEntry[];
+}
+
 export type MaterialType = typeof MaterialType[keyof typeof MaterialType];
 
 
@@ -151,4 +186,11 @@ export interface MaterialTextInput {
   content: string;
   contextNote?: string;
 }
+
+export type SearchParams = {
+/**
+ * @minLength 1
+ */
+q: string;
+};
 

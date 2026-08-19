@@ -2,6 +2,7 @@ import { Router, type IRouter, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
+import { fetchProjectContext } from "../lib/project-context";
 
 const router: IRouter = Router();
 
@@ -100,41 +101,24 @@ async function buildMeetingContext(
 async function buildProjectContext(
   projectId: number,
 ): Promise<{ context: string; valid: boolean; error?: string }> {
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .single();
-  if (!project) return { context: "", valid: false, error: "Project not found" };
-
-  const { data: meetings } = await supabase
-    .from("meetings")
-    .select("*")
-    .eq("project_id", projectId)
-    .order("date", { ascending: true });
+  const data = await fetchProjectContext(projectId);
+  if (!data) return { context: "", valid: false, error: "Project not found" };
 
   const lines: string[] = [
-    `# Proyecto: ${project.name}`,
-    project.description ? `Descripción del proyecto: ${project.description}` : "",
+    `# Proyecto: ${data.project.name}`,
+    data.project.description ? `Descripción del proyecto: ${data.project.description}` : "",
     "",
-    `## Reuniones del proyecto (${(meetings ?? []).length} total, ordenadas cronológicamente):`,
+    `## Reuniones del proyecto (${data.meetings.length} total, ordenadas cronológicamente):`,
   ];
 
-  for (const meeting of meetings ?? []) {
+  for (const meeting of data.meetings) {
     lines.push(`\n### Reunión: "${meeting.title}" — Fecha: ${meeting.date}`);
     if (meeting.notes) lines.push(`Notas:\n${meeting.notes}`);
 
-    const { data: materials } = await supabase
-      .from("materials")
-      .select("*")
-      .eq("meeting_id", meeting.id)
-      .order("created_at", { ascending: true });
-
-    const mats = materials ?? [];
-    if (mats.length === 0) {
+    if (meeting.materials.length === 0) {
       lines.push("(Sin materiales adjuntos)");
     } else {
-      for (const m of mats) {
+      for (const m of meeting.materials) {
         lines.push(`\n#### Material: ${m.original_name} (tipo: ${m.type})`);
         if (m.status === "processing") lines.push("[Aún en procesamiento]");
         else if (m.status === "error") lines.push("[Error al extraer]");

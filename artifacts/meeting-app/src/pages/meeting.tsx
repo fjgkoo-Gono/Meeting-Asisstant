@@ -8,6 +8,7 @@ import {
   getListMaterialsQueryKey,
   useDeleteMeeting,
   useDeleteMaterial,
+  useUpdateMeeting,
   getListMeetingsQueryKey,
   createMaterial,
   retryMaterial,
@@ -40,13 +41,17 @@ import {
   Mic,
   Presentation,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChatPanel } from '@/components/chat/ChatPanel';
+import { getAuthHeaders } from '@/lib/api';
 
 // ── Speaker helpers ───────────────────────────────────────────────────────
 
@@ -457,7 +462,7 @@ function MaterialCard({
     if (!fileUrl) return;
     const win = window.open('', '_blank');
     try {
-      const res = await fetch(fileUrl);
+      const res = await fetch(fileUrl, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -724,10 +729,10 @@ export default function MeetingDetail() {
   const chatEndpoint = `/api/projects/${projectId}/meetings/${meetingId}/chat`;
 
   return (
-    <div className="flex flex-col h-screen pt-safe bg-background">
+    <div className="flex flex-col h-screen md:h-full pt-safe bg-background">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/50 shrink-0">
-        <div className="flex items-center h-14 px-4 max-w-md mx-auto w-full">
+        <div className="flex items-center h-14 px-4 max-w-md md:max-w-xl lg:max-w-2xl mx-auto w-full">
           <Link href={`/projects/${projectId}`}>
             <Button variant="ghost" size="icon" className="-ml-2 h-10 w-10 rounded-full shrink-0">
               <ChevronLeft className="h-6 w-6" />
@@ -735,23 +740,23 @@ export default function MeetingDetail() {
           </Link>
           <div className="flex-1 px-2 overflow-hidden flex flex-col items-center justify-center">
             <h1 className="text-sm font-semibold truncate w-full text-center">
-              {project?.name ?? 'Loading...'}
+              {project?.name ?? 'Cargando...'}
             </h1>
             <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-              Project
+              Proyecto
             </span>
           </div>
           <button
             onClick={() => setShowDeleteDialog(true)}
             className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors shrink-0"
-            aria-label="Delete meeting"
+            aria-label="Eliminar reunión"
           >
             <Trash2 className="h-5 w-5" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex max-w-md mx-auto w-full px-4 pb-0 gap-1">
+        <div className="flex max-w-md md:max-w-xl lg:max-w-2xl mx-auto w-full px-4 pb-0 gap-1">
           <button
             onClick={() => setActiveTab('materials')}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-t-xl transition-colors border-b-2 ${
@@ -786,7 +791,7 @@ export default function MeetingDetail() {
           />
         </div>
       ) : (
-        <main className="flex-1 overflow-y-auto px-4 py-8 max-w-md mx-auto w-full flex flex-col gap-8 pb-safe">
+        <main className="flex-1 overflow-y-auto px-4 py-8 max-w-md md:max-w-xl lg:max-w-2xl mx-auto w-full flex flex-col gap-8 pb-safe">
           {isLoading ? (
             <div className="flex flex-col gap-4">
               <div className="h-10 w-3/4 bg-muted/50 animate-pulse rounded-xl" />
@@ -802,29 +807,12 @@ export default function MeetingDetail() {
                 </h2>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium bg-muted/30 w-fit px-3 py-1.5 rounded-lg border border-border/50">
                   <Calendar className="h-4 w-4" />
-                  {format(parseISO(meeting.date as unknown as string), 'EEEE, MMMM d, yyyy')}
+                  {format(parseISO(meeting.date as unknown as string), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
                 </div>
               </div>
 
               {/* Notes section */}
-              <div className="flex flex-col">
-                <h3 className="text-lg font-serif font-semibold mb-4 text-foreground/80">Notes</h3>
-                <div className="bg-card border border-border shadow-sm rounded-3xl p-6 min-h-[180px]">
-                  {meeting.notes ? (
-                    <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-headings:font-serif">
-                      {(meeting.notes as string).split('\n').map((paragraph, idx) => (
-                        <p key={idx} className="mb-4 last:mb-0 text-foreground/90">
-                          {paragraph || <br />}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-full min-h-[120px] text-muted-foreground italic text-sm">
-                      No notes recorded for this meeting.
-                    </div>
-                  )}
-                </div>
-              </div>
+              <MeetingNotes projectId={projectId} meetingId={meetingId} notes={(meeting.notes as string | null) ?? null} />
 
               {/* Materials section */}
               <div className="flex flex-col">
@@ -884,7 +872,7 @@ export default function MeetingDetail() {
               </div>
             </>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">Meeting not found.</div>
+            <div className="text-center py-12 text-muted-foreground">Reunión no encontrada.</div>
           )}
         </main>
       )}
@@ -921,14 +909,14 @@ export default function MeetingDetail() {
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="sm:max-w-[400px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">Delete meeting?</DialogTitle>
+            <DialogTitle className="font-serif text-xl">¿Eliminar reunión?</DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground mt-1">
-              <span className="font-medium text-foreground">"{meeting?.title}"</span> and all its uploaded files will be permanently deleted. This cannot be undone.
+              <span className="font-medium text-foreground">"{meeting?.title}"</span> y todos sus archivos subidos se eliminarán permanentemente. Esto no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-col gap-2 mt-4 sm:flex-row">
             <Button variant="outline" className="rounded-xl flex-1" onClick={() => setShowDeleteDialog(false)} disabled={deleteMeetingPending}>
-              Cancel
+              Cancelar
             </Button>
             <Button
               variant="destructive"
@@ -936,11 +924,108 @@ export default function MeetingDetail() {
               disabled={deleteMeetingPending}
               onClick={() => meeting && deleteMeeting({ projectId, meetingId })}
             >
-              {deleteMeetingPending ? 'Deleting…' : 'Delete'}
+              {deleteMeetingPending ? 'Eliminando…' : 'Eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Meeting notes (editable) ────────────────────────────────────────────────
+
+function MeetingNotes({
+  projectId,
+  meetingId,
+  notes,
+}: {
+  projectId: number;
+  meetingId: number;
+  notes: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(notes ?? '');
+
+  const { mutate: saveNotes, isPending } = useUpdateMeeting({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetMeetingQueryKey(projectId, meetingId) });
+        setIsEditing(false);
+      },
+      onError: () => {
+        toast.error('Error al guardar las notas. Inténtalo de nuevo.');
+      },
+    },
+  });
+
+  const startEditing = () => {
+    setDraft(notes ?? '');
+    setIsEditing(true);
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-serif font-semibold text-foreground/80">Notas</h3>
+        {!isEditing && (
+          <button
+            onClick={startEditing}
+            className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+            aria-label="Editar notas"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      <div className="bg-card border border-border shadow-sm rounded-3xl p-6 min-h-[180px]">
+        {isEditing ? (
+          <div className="flex flex-col gap-3">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="min-h-[140px] resize-none border-0 shadow-none p-0 focus-visible:ring-0 text-sm leading-relaxed"
+              placeholder="Escribe las notas de esta reunión..."
+              autoFocus
+            />
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-lg"
+                onClick={() => setIsEditing(false)}
+                disabled={isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-lg"
+                disabled={isPending}
+                onClick={() => saveNotes({ projectId, meetingId, data: { notes: draft.trim() || null } })}
+              >
+                {isPending ? 'Guardando...' : 'Guardar'}
+              </Button>
+            </div>
+          </div>
+        ) : notes ? (
+          <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-headings:font-serif">
+            {notes.split('\n').map((paragraph, idx) => (
+              <p key={idx} className="mb-4 last:mb-0 text-foreground/90">
+                {paragraph || <br />}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <button
+            onClick={startEditing}
+            className="flex items-center justify-center h-full min-h-[120px] w-full text-muted-foreground italic text-sm hover:text-foreground transition-colors"
+          >
+            Sin notas — toca para agregar.
+          </button>
+        )}
+      </div>
     </div>
   );
 }

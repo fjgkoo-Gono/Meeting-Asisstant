@@ -10,13 +10,13 @@ export default function NotFound() {
         <CardContent className="pt-6 flex flex-col items-center text-center">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
           <h1 className="text-2xl font-serif font-bold text-foreground mb-2">
-            Page Not Found
+            Página no encontrada
           </h1>
           <p className="text-sm text-muted-foreground mb-6">
-            The page you're looking for doesn't exist or has been moved.
+            La página que buscas no existe o fue movida.
           </p>
           <Link href="/">
-            <Button className="rounded-xl w-full">Return Home</Button>
+            <Button className="rounded-xl w-full">Volver al inicio</Button>
           </Link>
         </CardContent>
       </Card>

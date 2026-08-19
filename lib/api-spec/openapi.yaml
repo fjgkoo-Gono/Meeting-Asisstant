@@ -491,6 +491,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/timeline:
+    get:
+      operationId: getProjectTimeline
+      tags: [projects]
+      summary: Chronological meeting highlights for a project, with AI-generated change detection between meetings
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Project timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTimeline"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Timeline generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/summary:
     get:
       operationId: getProjectSummary
@@ -511,6 +542,32 @@ paths:
                 $ref: "#/components/schemas/ProjectSummary"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /search:
+    get:
+      operationId: search
+      tags: [search]
+      summary: Search projects (name/description), meetings (title), and materials (extracted text/context note)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
+        "400":
+          description: Missing query
           content:
             application/json:
               schema:
@@ -670,6 +727,73 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentMeeting"
+
+    SearchProjectResult:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+
+    SearchMeetingResult:
+      type: object
+      required: [id, projectId, projectName, title, date]
+      properties:
+        id:
+          type: number
+        projectId:
+          type: number
+        projectName:
+          type: string
+        title:
+          type: string
+        date:
+          type: string
+          format: date
+        snippet:
+          type: ["string", "null"]
+
+    SearchResult:
+      type: object
+      required: [projects, meetings]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchProjectResult"
+        meetings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchMeetingResult"
+
+    TimelineEntry:
+      type: object
+      required: [meetingId, title, date, highlight]
+      properties:
+        meetingId:
+          type: number
+        title:
+          type: string
+        date:
+          type: string
+          format: date
+        highlight:
+          type: string
+        changeFromPrevious:
+          type: ["string", "null"]
+
+    ProjectTimeline:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEntry"
 
     MaterialType:
       type: string

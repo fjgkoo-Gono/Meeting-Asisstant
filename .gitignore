@@ -7,6 +7,8 @@ out-tsc
 *.tsbuildinfo
 .expo
 .expo-shared
+__pycache__
+*.pyc
 
 # dependencies
 node_modules
@@ -51,3 +53,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local secrets — never commit real credentials
+.env
+.env.local
+.env.*.local

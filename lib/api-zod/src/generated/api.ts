@@ -311,6 +311,24 @@ export const RetryMaterialResponse = zod.object({
 
 
 /**
+ * @summary Chronological meeting highlights for a project, with AI-generated change detection between meetings
+ */
+export const GetProjectTimelineParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const GetProjectTimelineResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "meetingId": zod.number(),
+  "title": zod.string(),
+  "date": zod.coerce.date(),
+  "highlight": zod.string(),
+  "changeFromPrevious": zod.string().nullish()
+}))
+})
+
+
+/**
  * @summary Get a project summary with meeting count and latest meeting date
  */
 export const GetProjectSummaryParams = zod.object({
@@ -324,6 +342,33 @@ export const GetProjectSummaryResponse = zod.object({
   "meetingCount": zod.number(),
   "latestMeetingDate": zod.string().nullish(),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Search projects (name/description), meetings (title), and materials (extracted text/context note)
+ */
+
+
+
+export const SearchQueryParams = zod.object({
+  "q": zod.coerce.string().min(1)
+})
+
+export const SearchResponse = zod.object({
+  "projects": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish()
+})),
+  "meetings": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "projectName": zod.string(),
+  "title": zod.string(),
+  "date": zod.coerce.date(),
+  "snippet": zod.string().nullish()
+}))
 })
 
 
