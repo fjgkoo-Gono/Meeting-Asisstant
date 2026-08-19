@@ -1,0 +1,11 @@
+{
+  "buildCommand": "pnpm --filter @workspace/meeting-app run build",
+  "installCommand": "pnpm install",
+  "outputDirectory": "artifacts/meeting-app/dist/public",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://meeting-assistant-api.onrender.com/api/:path*"
+    }
+  ]
+}
