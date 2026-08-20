@@ -206,8 +206,11 @@ export default function ProjectDetail() {
         )}
       </main>
 
-      {/* Floating "Consultar proyecto" button — sits above the mobile bottom tab bar */}
-      <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-20 pb-safe">
+      {/* Floating "Consultar proyecto" button — offset by the mobile bottom tab
+          bar's actual height (h-16) + the device's safe-area inset + a gap,
+          so it clears the bar regardless of gesture-nav height. Desktop has
+          no bottom bar (sidebar instead), so a plain offset is enough there. */}
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] md:bottom-8 left-1/2 -translate-x-1/2 z-20">
         <button
           onClick={() => setShowProjectChat(true)}
           className="flex items-center gap-2.5 px-5 py-3.5 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:bg-primary/90 active:scale-95 transition-all font-medium text-sm"
