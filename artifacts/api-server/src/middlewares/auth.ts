@@ -1,44 +1,40 @@
 import type { NextFunction, Request, Response } from "express";
-import { logger } from "../lib/logger";
+import { supabase } from "../lib/supabase";
+
+declare global {
+  namespace Express {
+    interface Request {
+      /** Set by requireAuth once the bearer token is verified. */
+      userId?: string;
+    }
+  }
+}
 
 /**
- * Simple shared-secret gate for all /api routes. Not real user auth — just
- * enough to stop drive-by bots/scrapers from hitting a public deployment and
- * running up Anthropic/Cloudinary/Gladia usage. The secret ships inside the
- * built frontend bundle, so it's not a defense against a targeted attacker
- * who reads the JS — only against untargeted automated abuse.
- *
- * Disabled (passes everything through) when API_SHARED_SECRET is unset, so
- * local dev without a .env entry still works.
+ * Verifies the bearer token as a Supabase Auth JWT and attaches the caller's
+ * user id to the request as `req.userId`. Every route below /api requires a
+ * signed-in user — this is real per-user auth, not a shared secret, since
+ * project/meeting/material data is scoped by owner.
  */
-export function requireApiSecret(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.API_SHARED_SECRET;
-  if (!secret) {
-    next();
-    return;
-  }
-
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (req.path === "/healthz") {
     next();
     return;
   }
 
   const authHeader = req.header("authorization");
-  const provided = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
-
-  if (provided !== secret) {
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+  if (!token) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  next();
-}
-
-export function warnIfApiSecretMissing(): void {
-  if (!process.env.API_SHARED_SECRET) {
-    logger.warn(
-      "API_SHARED_SECRET is not set — the API accepts unauthenticated requests. " +
-        "Set it before deploying anywhere reachable from the public internet.",
-    );
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
   }
+
+  req.userId = data.user.id;
+  next();
 }

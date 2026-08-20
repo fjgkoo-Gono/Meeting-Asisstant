@@ -1,3 +1,5 @@
+import { supabase } from '@/lib/supabase';
+
 /**
  * Returns the base URL for raw fetch calls to the API server.
  * The API is served on the same origin at the /api path prefix.
@@ -12,9 +14,10 @@ export function getBaseUrl(): string {
  * Auth header for raw `fetch()` calls that bypass the generated API client
  * (which attaches this automatically via `setAuthTokenGetter`) — e.g. SSE
  * streaming (ChatPanel) and blob downloads (file viewer). Must be spread
- * into every such call or the api-server's shared-secret middleware 401s it.
+ * into every such call or the api-server's auth middleware 401s it.
  */
-export function getAuthHeaders(): HeadersInit {
-  const secret = import.meta.env.VITE_API_SHARED_SECRET;
-  return secret ? { Authorization: `Bearer ${secret}` } : {};
+export async function getAuthHeaders(): Promise<HeadersInit> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }

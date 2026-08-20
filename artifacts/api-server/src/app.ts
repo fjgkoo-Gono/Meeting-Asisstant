@@ -7,11 +7,9 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { supabase } from "./lib/supabase";
 import { isStorageUrl, downloadFromStorage, isSupabaseStorageUrl, downloadFromSupabaseStorage } from "./lib/storage";
-import { requireApiSecret, warnIfApiSecretMissing } from "./middlewares/auth";
+import { requireAuth } from "./middlewares/auth";
 
 const app: Express = express();
-
-warnIfApiSecretMissing();
 
 app.use(
   pinoHttp({
@@ -41,7 +39,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/api", requireApiSecret);
+app.use("/api", requireAuth);
 
 // Compatibility shim: old frontend builds hit /api/files/:filename.
 // Route each case to the right source so cached clients keep working.

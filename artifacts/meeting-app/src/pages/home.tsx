@@ -2,11 +2,12 @@ import { useListProjects, useCreateProject, useDeleteProject, useSearch } from '
 import { useQueryClient } from '@tanstack/react-query';
 import { getListProjectsQueryKey, getSearchQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
-import { Plus, Folder, ChevronRight, Search, Trash2, Sun, Moon, MessageSquare } from 'lucide-react';
+import { Plus, Folder, ChevronRight, Search, Trash2, Sun, Moon, MessageSquare, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -34,6 +35,7 @@ export default function Home() {
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const { theme, toggle: toggleTheme } = useTheme();
+  const { signOut } = useAuth();
 
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const isSearching = debouncedSearch.length > 0;
@@ -53,6 +55,13 @@ export default function Home() {
             aria-label="Cambiar tema"
           >
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
+          <button
+            onClick={() => signOut()}
+            className="md:hidden p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="h-5 w-5" />
           </button>
           <NewProjectDialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen} />
         </div>

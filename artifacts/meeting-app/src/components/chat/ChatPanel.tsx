@@ -29,7 +29,8 @@ export function ChatPanel({ chatEndpoint, placeholder }: ChatPanelProps) {
   // Load history
   useEffect(() => {
     setHistoryLoading(true);
-    fetch(`${getBaseUrl()}${chatEndpoint}`, { headers: getAuthHeaders() })
+    getAuthHeaders()
+      .then(headers => fetch(`${getBaseUrl()}${chatEndpoint}`, { headers }))
       .then(r => r.json())
       .then((data: { role: string; content: string; id: number }[]) => {
         if (Array.isArray(data)) {
@@ -76,9 +77,10 @@ export function ChatPanel({ chatEndpoint, placeholder }: ChatPanelProps) {
     const history = messages.map(m => ({ role: m.role, content: m.content }));
 
     try {
+      const authHeaders = await getAuthHeaders();
       const resp = await fetch(`${getBaseUrl()}${chatEndpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ message: text, history }),
       });
 

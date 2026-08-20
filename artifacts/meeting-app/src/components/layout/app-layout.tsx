@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { LayoutList, BarChart2, ListTodo } from 'lucide-react';
+import { LayoutList, BarChart2, ListTodo, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 
 // Mobile: bottom tab bar (page itself owns scrolling, same as before).
 // Desktop (md+): left sidebar that stays put — the viewport height is fixed
@@ -8,6 +9,7 @@ import { LayoutList, BarChart2, ListTodo } from 'lucide-react';
 // matter which page (including project/meeting detail) is open.
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const { signOut } = useAuth();
   const isHome = location === '/' || location.startsWith('/projects');
   const isTasks = location === '/tasks';
   const isStats = location === '/stats';
@@ -47,6 +49,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
             Actividad
           </Link>
         </nav>
+
+        <button
+          onClick={() => signOut()}
+          className="mt-auto flex items-center gap-3 px-3 py-2.5 mx-3 mb-4 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <LogOut className="w-5 h-5" />
+          Cerrar sesión
+        </button>
       </aside>
 
       <main className="flex-1 pb-safe flex flex-col mb-16 md:mb-0 min-w-0 md:overflow-y-auto">

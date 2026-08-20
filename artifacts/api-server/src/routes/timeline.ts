@@ -42,10 +42,11 @@ const TIMELINE_TOOL: Anthropic.Tool = {
 
 // GET /projects/:projectId/timeline
 router.get("/projects/:projectId/timeline", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const projectId = Number(req.params.projectId);
   if (!projectId) { res.status(400).json({ error: "Invalid project ID" }); return; }
 
-  const data = await fetchProjectContext(projectId);
+  const data = await fetchProjectContext(projectId, userId);
   if (!data) { res.status(404).json({ error: "Project not found" }); return; }
 
   if (data.meetings.length === 0) {

@@ -49,8 +49,9 @@ function applySpeakerMap(text: string, speakerMap: Record<string, string> | null
 async function buildMeetingContext(
   projectId: number,
   meetingId: number,
+  userId: string,
 ): Promise<{ context: string; valid: boolean; error?: string }> {
-  const data = await fetchMeetingContext(projectId, meetingId);
+  const data = await fetchMeetingContext(projectId, meetingId, userId);
   if (!data.ok) return { context: "", valid: false, error: data.error };
   const { project, meeting, materials: mats } = data;
 
@@ -83,8 +84,9 @@ async function buildMeetingContext(
 
 async function buildProjectContext(
   projectId: number,
+  userId: string,
 ): Promise<{ context: string; valid: boolean; error?: string }> {
-  const data = await fetchProjectContext(projectId);
+  const data = await fetchProjectContext(projectId, userId);
   if (!data) return { context: "", valid: false, error: "Project not found" };
 
   const lines: string[] = [
@@ -136,9 +138,18 @@ function sendSSE(res: Response, event: string, data: unknown) {
 router.get(
   "/projects/:projectId/meetings/:meetingId/chat",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const projectId = Number(req.params.projectId);
     const meetingId = Number(req.params.meetingId);
     if (!projectId || !meetingId) { res.status(400).json({ error: "Invalid IDs" }); return; }
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("user_id", userId)
+      .single();
+    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
     const { data } = await supabase
       .from("chat_messages")
@@ -156,6 +167,7 @@ router.get(
 router.post(
   "/projects/:projectId/meetings/:meetingId/chat",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const projectId = Number(req.params.projectId);
     const meetingId = Number(req.params.meetingId);
     const { message, history = [] } = req.body as {
@@ -165,7 +177,7 @@ router.post(
 
     if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
 
-    const { context, valid, error } = await buildMeetingContext(projectId, meetingId);
+    const { context, valid, error } = await buildMeetingContext(projectId, meetingId, userId);
     if (!valid) { res.status(404).json({ error }); return; }
 
     await saveChatMessage("meeting", meetingId, "user", message);
@@ -210,8 +222,17 @@ router.post(
 // ── GET /projects/:projectId/chat ─────────────────────────────────────────────
 
 router.get("/projects/:projectId/chat", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const projectId = Number(req.params.projectId);
   if (!projectId) { res.status(400).json({ error: "Invalid project ID" }); return; }
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", userId)
+    .single();
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
   const { data } = await supabase
     .from("chat_messages")
@@ -226,6 +247,7 @@ router.get("/projects/:projectId/chat", async (req, res): Promise<void> => {
 // ── POST /projects/:projectId/chat ────────────────────────────────────────────
 
 router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const projectId = Number(req.params.projectId);
   const { message, history = [] } = req.body as {
     message: string;
@@ -234,7 +256,7 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
 
   if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
 
-  const { context, valid, error } = await buildProjectContext(projectId);
+  const { context, valid, error } = await buildProjectContext(projectId, userId);
   if (!valid) { res.status(404).json({ error }); return; }
 
   await saveChatMessage("project", projectId, "user", message);

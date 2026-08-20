@@ -19,10 +19,12 @@ import {
 const router: IRouter = Router();
 
 // GET /projects
-router.get("/projects", async (_req, res): Promise<void> => {
+router.get("/projects", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const { data, error } = await supabase
     .from("projects")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(ListProjectsResponse.parse(rowsToCamel(data ?? [])));
@@ -30,12 +32,13 @@ router.get("/projects", async (_req, res): Promise<void> => {
 
 // POST /projects
 router.post("/projects", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const parsed = CreateProjectBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const { data, error } = await supabase
     .from("projects")
-    .insert({ name: parsed.data.name, description: parsed.data.description ?? null })
+    .insert({ name: parsed.data.name, description: parsed.data.description ?? null, user_id: userId })
     .select()
     .single();
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -44,6 +47,7 @@ router.post("/projects", async (req, res): Promise<void> => {
 
 // GET /projects/:projectId
 router.get("/projects/:projectId", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = GetProjectParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -51,6 +55,7 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
     .from("projects")
     .select("*")
     .eq("id", params.data.projectId)
+    .eq("user_id", userId)
     .single();
   if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
   res.json(GetProjectResponse.parse(toCamel(data)));
@@ -58,6 +63,7 @@ router.get("/projects/:projectId", async (req, res): Promise<void> => {
 
 // DELETE /projects/:projectId
 router.delete("/projects/:projectId", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = GetProjectParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -77,6 +83,7 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
     .from("projects")
     .delete()
     .eq("id", params.data.projectId)
+    .eq("user_id", userId)
     .select()
     .single();
   if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
@@ -89,6 +96,7 @@ router.delete("/projects/:projectId", async (req, res): Promise<void> => {
 
 // PATCH /projects/:projectId
 router.patch("/projects/:projectId", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = UpdateProjectParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -108,6 +116,7 @@ router.patch("/projects/:projectId", async (req, res): Promise<void> => {
     .from("projects")
     .update(updates)
     .eq("id", params.data.projectId)
+    .eq("user_id", userId)
     .select()
     .single();
   if (error || !data) { res.status(404).json({ error: "Project not found" }); return; }
@@ -116,6 +125,7 @@ router.patch("/projects/:projectId", async (req, res): Promise<void> => {
 
 // GET /projects/:projectId/summary
 router.get("/projects/:projectId/summary", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = GetProjectSummaryParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -123,6 +133,7 @@ router.get("/projects/:projectId/summary", async (req, res): Promise<void> => {
     .from("projects")
     .select("*")
     .eq("id", params.data.projectId)
+    .eq("user_id", userId)
     .single();
   if (pErr || !project) { res.status(404).json({ error: "Project not found" }); return; }
 
@@ -149,20 +160,32 @@ router.get("/projects/:projectId/summary", async (req, res): Promise<void> => {
 });
 
 // GET /stats
-router.get("/stats", async (_req, res): Promise<void> => {
+router.get("/stats", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const [
     { count: totalProjects },
+    { data: ownProjectRows },
+  ] = await Promise.all([
+    supabase.from("projects").select("*", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("projects").select("id").eq("user_id", userId),
+  ]);
+
+  const ownProjectIds = (ownProjectRows ?? []).map((p: { id: number }) => p.id);
+
+  const [
     { count: totalMeetings },
     { data: recentMeetingRows },
-  ] = await Promise.all([
-    supabase.from("projects").select("*", { count: "exact", head: true }),
-    supabase.from("meetings").select("*", { count: "exact", head: true }),
-    supabase
-      .from("meetings")
-      .select("id, project_id, title, date")
-      .order("date", { ascending: false })
-      .limit(5),
-  ]);
+  ] = ownProjectIds.length
+    ? await Promise.all([
+        supabase.from("meetings").select("*", { count: "exact", head: true }).in("project_id", ownProjectIds),
+        supabase
+          .from("meetings")
+          .select("id, project_id, title, date")
+          .in("project_id", ownProjectIds)
+          .order("date", { ascending: false })
+          .limit(5),
+      ])
+    : [{ count: 0 }, { data: [] as { id: number; project_id: number; title: string; date: string }[] }];
 
   // Fetch project names for the recent meetings
   const projectIds = [...new Set((recentMeetingRows ?? []).map((m: { project_id: number }) => m.project_id))];

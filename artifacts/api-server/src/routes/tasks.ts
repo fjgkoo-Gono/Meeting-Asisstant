@@ -27,8 +27,8 @@ const MODEL = "claude-sonnet-4-5";
 type ResolveError = { ok: false; error: string; status: 404 };
 type ResolveSuccess = { ok: true };
 
-async function resolveMeeting(projectId: number, meetingId: number): Promise<ResolveError | ResolveSuccess> {
-  const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).single();
+async function resolveMeeting(projectId: number, meetingId: number, userId: string): Promise<ResolveError | ResolveSuccess> {
+  const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).eq("user_id", userId).single();
   if (!project) return { ok: false, error: "Project not found", status: 404 };
 
   const { data: meeting } = await supabase
@@ -44,10 +44,11 @@ async function resolveMeeting(projectId: number, meetingId: number): Promise<Res
 
 // GET /projects/:projectId/meetings/:meetingId/tasks
 router.get("/projects/:projectId/meetings/:meetingId/tasks", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = ListMeetingTasksParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+  const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
   if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
   const { data, error } = await supabase
@@ -62,13 +63,14 @@ router.get("/projects/:projectId/meetings/:meetingId/tasks", async (req, res): P
 
 // POST /projects/:projectId/meetings/:meetingId/tasks
 router.post("/projects/:projectId/meetings/:meetingId/tasks", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = CreateMeetingTaskParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const body = CreateMeetingTaskBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
-  const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+  const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
   if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
   const { data, error } = await supabase
@@ -86,11 +88,15 @@ router.post("/projects/:projectId/meetings/:meetingId/tasks", async (req, res): 
 
 // PATCH /projects/:projectId/meetings/:meetingId/tasks/:taskId
 router.patch("/projects/:projectId/meetings/:meetingId/tasks/:taskId", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = UpdateMeetingTaskParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const body = UpdateMeetingTaskBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+  const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
+  if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
   const updates: Record<string, unknown> = {};
   if (body.data.description !== undefined) updates.description = body.data.description;
@@ -115,8 +121,12 @@ router.patch("/projects/:projectId/meetings/:meetingId/tasks/:taskId", async (re
 
 // DELETE /projects/:projectId/meetings/:meetingId/tasks/:taskId
 router.delete("/projects/:projectId/meetings/:meetingId/tasks/:taskId", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = DeleteMeetingTaskParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
+  if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
   const { data, error } = await supabase
     .from("tasks")
@@ -163,10 +173,11 @@ const EXTRACT_TOOL: Anthropic.Tool = {
 
 // POST /projects/:projectId/meetings/:meetingId/tasks/extract
 router.post("/projects/:projectId/meetings/:meetingId/tasks/extract", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const params = ExtractMeetingTasksParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const context = await fetchMeetingContext(params.data.projectId, params.data.meetingId);
+  const context = await fetchMeetingContext(params.data.projectId, params.data.meetingId, userId);
   if (!context.ok) { res.status(404).json({ error: context.error }); return; }
 
   const materialsText = context.materials.length === 0
@@ -228,6 +239,7 @@ router.post("/projects/:projectId/meetings/:meetingId/tasks/extract", async (req
 
 // GET /tasks
 router.get("/tasks", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const query = ListTasksQueryParams.safeParse(req.query);
   if (!query.success) { res.status(400).json({ error: query.error.message }); return; }
   const { projectId, meetingId, assignee } = query.data;
@@ -237,9 +249,20 @@ router.get("/tasks", async (req, res): Promise<void> => {
   const completedRaw = req.query.completed;
   const completed = completedRaw === undefined ? undefined : completedRaw === "true";
 
+  // Resolve the caller's own project ids first — chaining .eq() through two
+  // levels of embed (meetings.projects.user_id) isn't reliable, so filter
+  // ownership via project_id IN (...) instead, same as GET /stats.
+  const { data: ownProjectRows } = await supabase.from("projects").select("id").eq("user_id", userId);
+  const ownProjectIds = (ownProjectRows ?? []).map((p: { id: number }) => p.id);
+  if (ownProjectIds.length === 0) {
+    res.json(ListTasksResponse.parse([]));
+    return;
+  }
+
   let dbQuery = supabase
     .from("tasks")
     .select("*, meetings!inner(id, title, date, project_id, projects!inner(id, name))")
+    .in("meetings.project_id", ownProjectIds)
     .order("completed", { ascending: true })
     .order("created_at", { ascending: false });
 

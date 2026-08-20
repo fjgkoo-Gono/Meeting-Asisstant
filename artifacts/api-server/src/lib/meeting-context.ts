@@ -28,11 +28,13 @@ export type MeetingContextResult =
 export async function fetchMeetingContext(
   projectId: number,
   meetingId: number,
+  userId: string,
 ): Promise<MeetingContextResult> {
   const { data: project } = await supabase
     .from("projects")
     .select("*")
     .eq("id", projectId)
+    .eq("user_id", userId)
     .single();
   if (!project) return { ok: false, error: "Project not found" };
 

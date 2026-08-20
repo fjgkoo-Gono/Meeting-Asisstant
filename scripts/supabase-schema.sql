@@ -8,6 +8,12 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Owner of the project. ON DELETE SET NULL (not CASCADE) is deliberate: if a
+-- user is blocked/deleted in Supabase Auth, their projects must NOT be
+-- deleted — they just become unowned (still recoverable via SQL).
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
+
 CREATE TABLE IF NOT EXISTS meetings (
   id          SERIAL PRIMARY KEY,
   project_id  INTEGER     NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

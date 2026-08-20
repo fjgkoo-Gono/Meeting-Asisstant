@@ -28,11 +28,12 @@ export interface ProjectContextData {
   meetings: ProjectContextMeeting[];
 }
 
-export async function fetchProjectContext(projectId: number): Promise<ProjectContextData | null> {
+export async function fetchProjectContext(projectId: number, userId: string): Promise<ProjectContextData | null> {
   const { data: project } = await supabase
     .from("projects")
     .select("*")
     .eq("id", projectId)
+    .eq("user_id", userId)
     .single();
   if (!project) return null;
 

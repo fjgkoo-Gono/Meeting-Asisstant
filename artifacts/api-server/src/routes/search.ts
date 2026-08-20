@@ -17,8 +17,19 @@ function makeSnippet(text: string, query: string): string {
 
 // GET /search?q=...
 router.get("/search", async (req, res): Promise<void> => {
+  const userId = req.userId!;
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   if (!q) { res.status(400).json({ error: "q is required" }); return; }
+
+  const { data: ownProjectRows } = await supabase.from("projects").select("id").eq("user_id", userId);
+  const ownProjectIds = (ownProjectRows ?? []).map((p: { id: number }) => p.id);
+  if (ownProjectIds.length === 0) {
+    res.json(SearchResponse.parse({ projects: [], meetings: [] }));
+    return;
+  }
+
+  const { data: ownMeetingRows } = await supabase.from("meetings").select("id").in("project_id", ownProjectIds);
+  const ownMeetingIds = (ownMeetingRows ?? []).map((m: { id: number }) => m.id);
 
   const like = `%${q}%`;
 
@@ -29,11 +40,15 @@ router.get("/search", async (req, res): Promise<void> => {
     { data: matByText },
     { data: matByNote },
   ] = await Promise.all([
-    supabase.from("projects").select("id, name, description").ilike("name", like),
-    supabase.from("projects").select("id, name, description").ilike("description", like),
-    supabase.from("meetings").select("id, project_id, title, date").ilike("title", like),
-    supabase.from("materials").select("id, meeting_id, extracted_text, context_note").ilike("extracted_text", like),
-    supabase.from("materials").select("id, meeting_id, extracted_text, context_note").ilike("context_note", like),
+    supabase.from("projects").select("id, name, description").in("id", ownProjectIds).ilike("name", like),
+    supabase.from("projects").select("id, name, description").in("id", ownProjectIds).ilike("description", like),
+    supabase.from("meetings").select("id, project_id, title, date").in("project_id", ownProjectIds).ilike("title", like),
+    ownMeetingIds.length
+      ? supabase.from("materials").select("id, meeting_id, extracted_text, context_note").in("meeting_id", ownMeetingIds).ilike("extracted_text", like)
+      : Promise.resolve({ data: [] as { id: number; meeting_id: number; extracted_text: string | null; context_note: string | null }[] }),
+    ownMeetingIds.length
+      ? supabase.from("materials").select("id, meeting_id, extracted_text, context_note").in("meeting_id", ownMeetingIds).ilike("context_note", like)
+      : Promise.resolve({ data: [] as { id: number; meeting_id: number; extracted_text: string | null; context_note: string | null }[] }),
   ]);
 
   // Dedupe projects matched by name and/or description

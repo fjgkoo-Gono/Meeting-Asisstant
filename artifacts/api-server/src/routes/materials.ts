@@ -61,11 +61,13 @@ type ResolveSuccess = { ok: true };
 async function resolveMeeting(
   projectId: number,
   meetingId: number,
+  userId: string,
 ): Promise<ResolveError | ResolveSuccess> {
   const { data: project } = await supabase
     .from("projects")
     .select("id")
     .eq("id", projectId)
+    .eq("user_id", userId)
     .single();
   if (!project) return { ok: false, error: "Project not found", status: 404 };
 
@@ -84,10 +86,11 @@ async function resolveMeeting(
 router.get(
   "/projects/:projectId/meetings/:meetingId/materials",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const params = ListMaterialsParams.safeParse(req.params);
     if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
     if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
     const { data, error } = await supabase
@@ -105,10 +108,11 @@ router.post(
   "/projects/:projectId/meetings/:meetingId/materials",
   upload.single("file"),
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const params = CreateMaterialParams.safeParse(req.params);
     if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
     if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
     const rawType = req.body?.type as string | undefined;
@@ -221,10 +225,11 @@ router.post(
 router.post(
   "/projects/:projectId/meetings/:meetingId/materials/:materialId/retry",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const params = RetryMaterialParams.safeParse(req.params);
     if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
     if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
     const { data: material } = await supabase
@@ -278,16 +283,22 @@ router.post(
 router.get(
   "/materials/:materialId/file",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const materialId = parseInt(req.params.materialId, 10);
     if (isNaN(materialId)) { res.status(400).json({ error: "Invalid material id" }); return; }
 
     const { data: material } = await supabase
       .from("materials")
-      .select("id, filename, type, original_name")
+      .select("id, filename, type, original_name, meeting_id, meetings!inner(project_id, projects!inner(user_id))")
       .eq("id", materialId)
       .single();
 
-    if (!material || !material.filename) { res.status(404).json({ error: "Material not found" }); return; }
+    const ownerId = (material as unknown as { meetings?: { projects?: { user_id?: string } } } | null)
+      ?.meetings?.projects?.user_id;
+    if (!material || !material.filename || ownerId !== userId) {
+      res.status(404).json({ error: "Material not found" });
+      return;
+    }
 
     if (isSupabaseStorageUrl(material.filename)) {
       // Supabase Storage (supa://) — download server-side and stream to client
@@ -362,13 +373,14 @@ router.get(
 router.patch(
   "/projects/:projectId/meetings/:meetingId/materials/:materialId",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const params = UpdateMaterialSpeakersParams.safeParse(req.params);
     if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
     const body = UpdateMaterialSpeakersBody.safeParse(req.body);
     if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
-    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
     if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
     const { data: updated, error } = await supabase
@@ -388,10 +400,11 @@ router.patch(
 router.delete(
   "/projects/:projectId/meetings/:meetingId/materials/:materialId",
   async (req, res): Promise<void> => {
+    const userId = req.userId!;
     const params = DeleteMaterialParams.safeParse(req.params);
     if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId);
+    const resolved = await resolveMeeting(params.data.projectId, params.data.meetingId, userId);
     if (!resolved.ok) { res.status(resolved.status).json({ error: resolved.error }); return; }
 
     const { data: deleted, error } = await supabase

@@ -472,7 +472,7 @@ function MaterialCard({
     if (!fileUrl) return;
     const win = window.open('', '_blank');
     try {
-      const res = await fetch(fileUrl, { headers: getAuthHeaders() });
+      const res = await fetch(fileUrl, { headers: await getAuthHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
