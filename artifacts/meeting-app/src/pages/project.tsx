@@ -206,8 +206,8 @@ export default function ProjectDetail() {
         )}
       </main>
 
-      {/* Floating "Consultar proyecto" button */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20 pb-safe">
+      {/* Floating "Consultar proyecto" button — sits above the mobile bottom tab bar */}
+      <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-20 pb-safe">
         <button
           onClick={() => setShowProjectChat(true)}
           className="flex items-center gap-2.5 px-5 py-3.5 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:bg-primary/90 active:scale-95 transition-all font-medium text-sm"
