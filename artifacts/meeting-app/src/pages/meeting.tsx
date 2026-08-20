@@ -161,7 +161,7 @@ function ContextNoteModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onCancel}>
       <div
-        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 flex flex-col gap-4 pb-safe"
+        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 flex flex-col gap-4 pb-safe max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -226,7 +226,7 @@ function TextMaterialModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 flex flex-col gap-4 pb-safe"
+        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 flex flex-col gap-4 pb-safe max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -321,7 +321,7 @@ function AddMaterialSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 pb-safe"
+        className="w-full max-w-md mx-auto bg-card rounded-t-3xl p-6 pb-safe max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">

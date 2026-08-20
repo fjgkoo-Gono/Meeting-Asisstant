@@ -262,7 +262,7 @@ function NewProjectDialog({ open, onOpenChange }: { open: boolean, onOpenChange:
           <Plus className="h-5 w-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe">
+      <DialogContent className="sm:max-w-[425px] rounded-t-3xl sm:rounded-3xl mt-auto sm:mt-0 pt-safe max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif text-xl">Nuevo proyecto</DialogTitle>
         </DialogHeader>
