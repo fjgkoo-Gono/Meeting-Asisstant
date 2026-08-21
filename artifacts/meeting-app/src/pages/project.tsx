@@ -31,7 +31,7 @@ function ProjectChatSheet({
   const chatEndpoint = `/api/projects/${projectId}/chat`;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
       {/* Sheet header */}
       <div className="shrink-0 flex items-center h-14 px-4 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <button
